@@ -735,7 +735,9 @@ class XiuXianData:
         }
     
     # ===== 装备系统 =====
-    def get_equipment_list(self) -> Dict[str, List[Dict[str, Any]]]:
+    # 该函数为静态方法，不需要实例化即可调用
+    @staticmethod
+    def get_equipment_list() -> Dict[str, List[Dict[str, Any]]]:
         """获取所有可用装备列表"""
         equipment = {
             "weapon": [

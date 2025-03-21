@@ -4,6 +4,7 @@ from astrbot.api import logger
 import os
 import time
 from .xiuxian_data import XiuXianData
+from .markdown_formatter import MarkdownFormatter
 
 @register("xiuxian", "修仙游戏", "一个简单的修仙游戏插件", "1.0.0")
 class XiuXianPlugin(Star):
@@ -57,7 +58,9 @@ class XiuXianPlugin(Star):
                     /使用丹药 [丹药名] - 使用丹药
 
                     踏上仙途，修炼不止！"""
-        yield event.plain_result(help_text)
+        # 使用Markdown格式化帮助信息
+        formatted_help = MarkdownFormatter.format_help(help_text)
+        yield event.plain_result(formatted_help)
     
     @filter.command("我要修仙")
     async def xiuxian_start(self, event: AstrMessageEvent):
@@ -76,10 +79,8 @@ class XiuXianPlugin(Star):
         user_data["username"] = user_name
         self.data_manager.update_user(user_id, user_data)
         
-        welcome_text = f"恭喜道友 {user_name} 踏上修仙之路！\n"
-        welcome_text += f"你获得了初始灵石 {user_data['spirit_stones']} 枚。\n"
-        welcome_text += "可使用 /修仙帮助 查看所有可用指令。\n"
-        welcome_text += "祝你修仙之路一帆风顺，早日飞升成仙！"
+        # 使用Markdown格式化欢迎信息
+        welcome_text = MarkdownFormatter.format_welcome(user_name, user_data['spirit_stones'])
         
         yield event.plain_result(welcome_text)
     
@@ -99,21 +100,11 @@ class XiuXianPlugin(Star):
             yield event.plain_result(f"道友 {user_name}，你尚未踏上修仙之路，请先输入 /我要修仙 开始你的修仙之旅。")
             return
         
-        info_text = f"道友 {user_name} 的修仙信息：\n"
-        info_text += f"境界：{user_data['realm']}\n"
-        info_text += f"修为等级：{user_data['level']}\n"
-        info_text += f"当前经验：{user_data['exp']}/{user_data['max_exp']}\n"
-        info_text += f"灵石：{user_data['spirit_stones']}\n"
-        
-        if user_data['techniques']:
-            info_text += "\n已学功法：\n"
-            for technique in user_data['techniques']:
-                info_text += f"- {technique}\n"
-        
-        # 如果有状态，显示状态信息
+        # 获取状态信息
         status_info = self.data_manager.check_status(user_id)
-        if status_info["has_status"]:
-            info_text += f"\n当前状态：{status_info['message']}"
+        
+        # 使用Markdown格式化用户信息
+        info_text = MarkdownFormatter.format_user_info(user_name, user_data, status_info)
         
         yield event.plain_result(info_text)
     
@@ -159,10 +150,8 @@ class XiuXianPlugin(Star):
         # 计算结束时间的可读形式
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
         
-        # 构建回复消息
-        result = f"道友 {user_name} 开始闭关修炼，预计 {duration_hours} 小时后({end_time})出关。\n"
-        result += f"修炼时间越长，获得的修为越多，请耐心等待。\n"
-        result += f"修炼结束后，你将获得丰厚的修为奖励！"
+        # 使用Markdown格式化修炼开始信息
+        result = MarkdownFormatter.format_practice_start(user_name, duration_hours, end_time)
         
         yield event.plain_result(result)
     
@@ -180,9 +169,8 @@ class XiuXianPlugin(Star):
         # 按等级和经验排序
         sorted_users = sorted(all_users.items(), key=lambda x: (x[1]['level'], x[1]['exp']), reverse=True)
         
-        rank_text = "【修仙世界排行榜】\n\n"
-        for i, (user_id, user_data) in enumerate(sorted_users[:10], 1):  # 只显示前10名
-            rank_text += f"{i}. {user_data['username']} 修士，境界 {user_data['realm']}，等级 {user_data['level']}\n"
+        # 使用Markdown格式化排行榜
+        rank_text = MarkdownFormatter.format_rank(sorted_users)
         
         yield event.plain_result(rank_text)
 
@@ -228,10 +216,8 @@ class XiuXianPlugin(Star):
         # 计算结束时间的可读形式
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
         
-        # 构建回复消息
-        result = f"道友 {user_name} 开始进入秘境探索，预计 {duration_hours} 小时后({end_time})归来。\n"
-        result += f"探索时间越长，获得的奖励越丰厚，但风险也越大，请耐心等待。\n"
-        result += f"探索结束后，你将获得丰厚的奖励！"
+        # 使用Markdown格式化探索开始信息
+        result = MarkdownFormatter.format_adventure_start(user_name, duration_hours, end_time)
         
         yield event.plain_result(result)
     
@@ -278,9 +264,7 @@ class XiuXianPlugin(Star):
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
         
         # 构建回复消息
-        result = f"道友 {user_name} 开始收集灵石，预计 {duration_hours} 小时后({end_time})完成。\n"
-        result += f"收集时间越长，获得的灵石越多，请耐心等待。\n"
-        result += f"收集结束后，你将获得丰厚的灵石奖励！"
+        result = MarkdownFormatter.format_mining_start(user_name, duration_hours, end_time)
         
         yield event.plain_result(result)
     
@@ -309,8 +293,9 @@ class XiuXianPlugin(Star):
             yield event.plain_result(f"道友 {user_name}，{result['message']}")
             return
         
-        # 构建回复消息
-        yield event.plain_result(f"道友 {user_name}，{result['message']}")
+        # 使用Markdown格式化签到信息
+        formatted_message = MarkdownFormatter.format_daily_sign(user_name, result['message'])
+        yield event.plain_result(formatted_message)
     
     @filter.command("修仙商店")
     async def xiuxian_shop(self, event: AstrMessageEvent):
@@ -337,52 +322,8 @@ class XiuXianPlugin(Star):
         # 获取可购买丹药列表
         available_pills = self.data_manager.get_available_pills(user_id)
         
-        # 构建回复消息
-        message = f"道友 {user_name}，仙缘阁商店：\n\n"
-        
-        # 显示装备部分
-        message += "===== 【装备区】 =====\n"
-        
-        # 显示武器
-        message += "【武器】\n"
-        for item in available_equipment["weapon"]:
-            status = "[已装备]" if item["equipped"] else "[可购买]" if item["can_buy"] else "[未达条件]"
-            message += f"{status} {item['name']} (ID: {item['id']}) - 需求等级: {item['level']} - 花费: {item['cost']} 灵石 - 攻击+{item['attack']}\n"
-        
-        # 显示护甲
-        message += "\n【护甲】\n"
-        for item in available_equipment["armor"]:
-            status = "[已装备]" if item["equipped"] else "[可购买]" if item["can_buy"] else "[未达条件]"
-            message += f"{status} {item['name']} (ID: {item['id']}) - 需求等级: {item['level']} - 花费: {item['cost']} 灵石 - 防御+{item['defense']}\n"
-        
-        # 显示饰品
-        message += "\n【饰品】\n"
-        for item in available_equipment["accessory"]:
-            status = "[已装备]" if item["equipped"] else "[可购买]" if item["can_buy"] else "[未达条件]"
-            message += f"{status} {item['name']} (ID: {item['id']}) - 需求等级: {item['level']} - 花费: {item['cost']} 灵石 - 生命+{item['hp']}\n"
-        
-        # 显示功法部分
-        message += "\n\n===== 【功法区】 =====\n"
-        for technique in available_techniques:
-            status = "[已学习]" if technique["learned"] else "[可学习]" if technique["can_learn"] else "[未达条件]"
-            message += f"{status} {technique['name']} - 需求等级: {technique['level_required']} - 花费: {technique['cost']} 灵石\n"
-            message += f"    {technique['description']}\n"
-        
-        # 显示丹药部分
-        message += "\n\n===== 【丹药区】 =====\n"
-        for pill in available_pills:
-            status = "[可购买]" if pill["can_buy"] else "[未达条件]"
-            message += f"{status} {pill['name']} - 需求等级: {pill['level_required']} - 花费: {pill['cost']} 灵石\n"
-            message += f"    {pill['description']}\n"
-            if pill["owned"] > 0:
-                message += f"    已拥有: {pill['owned']} 个\n"
-        
-        # 显示购买指令说明
-        message += "\n\n【购买指令】\n"
-        message += "购买装备 [装备ID] - 例如：购买装备 w1\n"
-        message += "学习功法 [功法名] - 例如：学习功法 吐纳术\n"
-        message += "购买丹药 [丹药名] - 例如：购买丹药 渡厄丹\n"
-        message += "使用丹药 [丹药名] - 例如：使用丹药 渡厄丹\n"
+        # 使用Markdown格式化商店信息
+        message = MarkdownFormatter.format_shop(user_name, available_equipment, available_techniques, available_pills)
         
         yield event.plain_result(message)
     
