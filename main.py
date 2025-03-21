@@ -1,8 +1,10 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
+from astrbot.api.all import MessageChain, At, Plain
 import os
 import time
+import asyncio
 from .xiuxian_data import XiuXianData
 from .markdown_formatter import MarkdownFormatter
 
@@ -15,6 +17,10 @@ class XiuXianPlugin(Star):
         data_dir = os.path.join(plugin_dir, "data")
         os.makedirs(data_dir, exist_ok=True)
         self.data_manager = XiuXianData(data_dir)
+        
+        # 存储用户状态任务的字典
+        self.user_status_tasks = {}
+        logger.info("修仙插件已启动")
     
     async def check_and_complete_status(self, event: AstrMessageEvent, user_id: str, user_name: str):
         '''检查并完成状态，如果状态已结束则发放奖励'''
@@ -33,7 +39,8 @@ class XiuXianPlugin(Star):
         
         if result["success"]:
             # 发送奖励消息
-            await event.reply(f"道友 {user_name}，{result['message']}")
+            # await event.reply(f"道友 {user_name}，{result['message']}")
+            await event.plain_result(f"道友 {user_name}，{result['message']}")
             return True
             
         return False
@@ -44,11 +51,11 @@ class XiuXianPlugin(Star):
         help_text = """【修仙游戏指令】
                     /我要修仙 - 开始修仙之旅
                     /修仙帮助 - 显示帮助
-                    /修炼 [1-3小时] - 闭关修炼获取修为，可指定1-3小时
+                    /修炼 [时间] - 闭关修炼获取修为，可指定时间（如：2小时30分钟，最长6小时）
                     /修仙信息 - 查看修仙信息
                     /修仙排行 - 查看排行榜
-                    /秘境探索 [1-3小时] - 探索秘境获奖励，可指定1-3小时
-                    /灵石收集 [1-3小时] - 获取灵石，可指定1-3小时
+                    /秘境探索 [时间] - 探索秘境获奖励，可指定时间（如：3小时45分钟，最长6小时）
+                    /灵石收集 [时间] - 获取灵石，可指定时间（如：1小时15分钟，最长6小时）
                     /修仙状态 - 查看当前状态
                     /修仙签到 - 每日签到
                     /修仙商店 - 查看统一商店（功法、装备、丹药）
@@ -90,9 +97,6 @@ class XiuXianPlugin(Star):
         user_id = str(event.get_sender_id())
         user_name = event.get_sender_name()
         
-        # 检查并完成状态，如果状态已结束则发放奖励
-        status_completed = await self.check_and_complete_status(event, user_id, user_name)
-        
         user_data = self.data_manager.get_user(user_id)
         
         # 检查用户是否已经开始修仙
@@ -127,18 +131,46 @@ class XiuXianPlugin(Star):
             return
         
         # 解析修炼时间参数
-        duration_hours = 1  # 默认1小时
+        duration_hours = 1.0  # 默认1小时
         
-        # 处理参数，支持"x小时"格式和纯数字格式
+        # 处理参数，支持"x小时y分钟"、"x小时"、"y分钟"和纯数字格式
         if duration:
-            # 移除可能的"小时"后缀
-            duration = duration.replace("小时", "").strip()
-            try:
-                duration_hours = int(duration)
-                # 限制在1-3小时之间
-                duration_hours = max(1, min(3, duration_hours))
-            except ValueError:
-                pass
+            # 解析小时和分钟
+            hours = 0
+            minutes = 0
+            
+            # 检查是否包含小时
+            if "小时" in duration:
+                hour_parts = duration.split("小时")
+                try:
+                    hours = int(hour_parts[0].strip())
+                except ValueError:
+                    pass
+                
+                # 检查是否还有分钟部分
+                if len(hour_parts) > 1 and "分钟" in hour_parts[1]:
+                    try:
+                        minutes = int(hour_parts[1].split("分钟")[0].strip())
+                    except ValueError:
+                        pass
+            # 检查是否只有分钟
+            elif "分钟" in duration:
+                try:
+                    minutes = int(duration.split("分钟")[0].strip())
+                except ValueError:
+                    pass
+            # 尝试将整个字符串解析为小时数
+            else:
+                try:
+                    hours = float(duration.strip())
+                except ValueError:
+                    pass
+            
+            # 计算总小时数（包括小数部分）
+            duration_hours = hours + (minutes / 60.0)
+            
+            # 限制在0.1-6小时之间
+            # duration_hours = max(0.1, min(6, duration_hours))
         
         # 设置修炼状态
         status_result = self.data_manager.set_status(user_id, "修炼中", duration_hours)
@@ -146,6 +178,12 @@ class XiuXianPlugin(Star):
         if not status_result["success"]:
             yield event.plain_result(f"道友 {user_name}，{status_result['message']}")
             return
+        
+        # 存储消息ID
+        unified_msg_origin = event.unified_msg_origin
+        
+        # 创建针对该用户的定时任务
+        self.create_user_status_task(user_id, user_name, status_result["end_time"], unified_msg_origin)
         
         # 计算结束时间的可读形式
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
@@ -160,9 +198,6 @@ class XiuXianPlugin(Star):
         '''查看修仙排行榜'''
         user_id = str(event.get_sender_id())
         user_name = event.get_sender_name()
-        
-        # 检查并完成状态，如果状态已结束则发放奖励
-        status_completed = await self.check_and_complete_status(event, user_id, user_name)
         
         all_users = self.data_manager.get_all_users()
         
@@ -193,25 +228,59 @@ class XiuXianPlugin(Star):
             return
         
         # 解析探索时间参数
-        duration_hours = 1  # 默认1小时
+        duration_hours = 1.0  # 默认1小时
         
-        # 处理参数，支持"x小时"格式和纯数字格式
+        # 处理参数，支持"x小时y分钟"、"x小时"、"y分钟"和纯数字格式
         if duration:
-            # 移除可能的"小时"后缀
-            duration = duration.replace("小时", "").strip()
-            try:
-                duration_hours = int(duration)
-                # 限制在1-3小时之间
-                duration_hours = max(1, min(3, duration_hours))
-            except ValueError:
-                pass
+            # 解析小时和分钟
+            hours = 0
+            minutes = 0
+            
+            # 检查是否包含小时
+            if "小时" in duration:
+                hour_parts = duration.split("小时")
+                try:
+                    hours = int(hour_parts[0].strip())
+                except ValueError:
+                    pass
+                
+                # 检查是否还有分钟部分
+                if len(hour_parts) > 1 and "分钟" in hour_parts[1]:
+                    try:
+                        minutes = int(hour_parts[1].split("分钟")[0].strip())
+                    except ValueError:
+                        pass
+            # 检查是否只有分钟
+            elif "分钟" in duration:
+                try:
+                    minutes = int(duration.split("分钟")[0].strip())
+                except ValueError:
+                    pass
+            # 尝试将整个字符串解析为小时数
+            else:
+                try:
+                    hours = float(duration.strip())
+                except ValueError:
+                    pass
+            
+            # 计算总小时数（包括小数部分）
+            duration_hours = hours + (minutes / 60.0)
+            
+            # 限制在0.1-6小时之间
+            # duration_hours = max(0.1, min(6, duration_hours))
         
         # 设置探索状态
         status_result = self.data_manager.set_status(user_id, "探索中", duration_hours)
         
+        # 存储消息ID
+        unified_msg_origin = event.unified_msg_origin
+        
         if not status_result["success"]:
             yield event.plain_result(f"道友 {user_name}，{status_result['message']}")
             return
+        
+        # 创建针对该用户的定时任务
+        self.create_user_status_task(user_id, user_name, status_result["end_time"], unified_msg_origin)
         
         # 计算结束时间的可读形式
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
@@ -240,18 +309,46 @@ class XiuXianPlugin(Star):
             return
         
         # 解析收集时间参数
-        duration_hours = 1  # 默认1小时
+        duration_hours = 1.0  # 默认1小时
         
-        # 处理参数，支持"x小时"格式和纯数字格式
+        # 处理参数，支持"x小时y分钟"、"x小时"、"y分钟"和纯数字格式
         if duration:
-            # 移除可能的"小时"后缀
-            duration = duration.replace("小时", "").strip()
-            try:
-                duration_hours = int(duration)
-                # 限制在1-3小时之间
-                duration_hours = max(1, min(3, duration_hours))
-            except ValueError:
-                pass
+            # 解析小时和分钟
+            hours = 0
+            minutes = 0
+            
+            # 检查是否包含小时
+            if "小时" in duration:
+                hour_parts = duration.split("小时")
+                try:
+                    hours = int(hour_parts[0].strip())
+                except ValueError:
+                    pass
+                
+                # 检查是否还有分钟部分
+                if len(hour_parts) > 1 and "分钟" in hour_parts[1]:
+                    try:
+                        minutes = int(hour_parts[1].split("分钟")[0].strip())
+                    except ValueError:
+                        pass
+            # 检查是否只有分钟
+            elif "分钟" in duration:
+                try:
+                    minutes = int(duration.split("分钟")[0].strip())
+                except ValueError:
+                    pass
+            # 尝试将整个字符串解析为小时数
+            else:
+                try:
+                    hours = float(duration.strip())
+                except ValueError:
+                    pass
+            
+            # 计算总小时数（包括小数部分）
+            duration_hours = hours + (minutes / 60)
+            
+            # 限制在0.1-6小时之间
+            duration_hours = max(0.1, min(6, duration_hours))
         
         # 设置收集灵石状态
         status_result = self.data_manager.set_status(user_id, "收集灵石中", duration_hours)
@@ -259,6 +356,12 @@ class XiuXianPlugin(Star):
         if not status_result["success"]:
             yield event.plain_result(f"道友 {user_name}，{status_result['message']}")
             return
+        
+        # 存储消息ID
+        unified_msg_origin = event.unified_msg_origin
+        
+        # 创建针对该用户的定时任务
+        self.create_user_status_task(user_id, user_name, status_result["end_time"], unified_msg_origin)
         
         # 计算结束时间的可读形式
         end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
@@ -581,6 +684,76 @@ class XiuXianPlugin(Star):
         
         yield event.plain_result(message)
     
+    def create_user_status_task(self, user_id: str, user_name: str, end_time: int, unified_msg_origin=None):
+        '''为用户创建状态检查任务'''
+        # 如果用户已有任务，先取消
+        if user_id in self.user_status_tasks and not self.user_status_tasks[user_id].done():
+            self.user_status_tasks[user_id].cancel()
+            logger.info(f"已取消用户 {user_name}({user_id}) 的旧状态任务")
+        
+        # 计算等待时间（秒）
+        wait_time = max(0, end_time - int(time.time()))
+        
+        # 创建新任务
+        self.user_status_tasks[user_id] = asyncio.create_task(
+            self.check_user_status_task(user_id, user_name, wait_time, unified_msg_origin)
+        )
+        logger.info(f"已为用户 {user_name}({user_id}) 创建状态任务，将在 {wait_time} 秒后完成")
+    
+    async def check_user_status_task(self, user_id: str, user_name: str, wait_time: int, unified_msg_origin):
+        '''异步任务：等待指定时间后检查用户状态并发放奖励'''
+        try:
+            # 等待到状态结束时间
+            await asyncio.sleep(wait_time + 5)
+            
+            # 获取用户数据
+            user_data = self.data_manager.get_user(user_id)
+            logger.info(f"开始检查用户 {user_name}({user_id}) 的状态")
+            # 检查用户是否仍有状态
+            if user_data.get("status") is not None:
+                # 完成状态并获取奖励
+                result = self.data_manager.complete_status(user_id)
+                logger.info(f"用户 {user_name}({user_id}) 的状态已完成")
+                logger.info(f"用户 {user_name}({user_id}) 的状态奖励：{result}")
+                # 如果状态完成成功
+                if result["success"]:
+                    # 构建消息链，@用户并发送奖励消息
+                    message_chain = MessageChain([
+                        At(qq=user_id),
+                        Plain(f" 道友 {user_name}，{result['message']}")
+                    ])
+                    logger.info(f"开始向用户 {user_name}({user_id}) 发送状态完成通知")
+                    try:
+                        # 尝试发送消息
+                        await self.context.send_message(unified_msg_origin, message_chain)
+                        logger.info(f"已向用户 {user_name}({user_id}) 发送状态完成通知")
+                    except Exception as e:
+                        logger.error(f"向用户 {user_name}({user_id}) 发送状态完成通知失败: {e}")
+        
+        except asyncio.CancelledError:
+            # 任务被取消
+            logger.info(f"用户 {user_name}({user_id}) 的状态任务被取消")
+        except Exception as e:
+            logger.error(f"用户 {user_name}({user_id}) 的状态任务出错: {e}")
+        finally:
+            # 任务完成后，从字典中移除引用
+            if user_id in self.user_status_tasks:
+                # 检查当前任务是否仍然是字典中的任务（可能已被新任务替换）
+                if self.user_status_tasks[user_id] == asyncio.current_task():
+                    self.user_status_tasks.pop(user_id, None)
+                    logger.info(f"用户 {user_name}({user_id}) 的状态任务已从任务字典中移除")
+    
     async def terminate(self):
         '''可选择实现 terminate 函数，当插件被卸载/停用时会调用。'''
+        # 取消所有用户状态任务
+        if hasattr(self, 'user_status_tasks'):
+            for user_id, task in list(self.user_status_tasks.items()):
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+            self.user_status_tasks.clear()
+        
         logger.info("修仙游戏插件已卸载")

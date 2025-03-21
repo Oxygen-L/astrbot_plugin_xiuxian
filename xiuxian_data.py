@@ -4,6 +4,7 @@ import random
 import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from astrbot.api import logger
 
 # 修仙游戏数据管理类
 class XiuXianData:
@@ -11,6 +12,12 @@ class XiuXianData:
         self.data_dir = data_dir
         self.user_data_file = os.path.join(data_dir, "user_data.json")
         self.users = self._load_data()
+        
+        # 加载境界配置
+        self.realms_config_file = os.path.join(data_dir, "configs", "realms.json")
+        self.breakthrough_rates_file = os.path.join(data_dir, "configs", "breakthrough_rates.json")
+        self.realms_config = self._load_realms_config()
+        self.breakthrough_rates = self._load_breakthrough_rates()
     
     def _load_data(self) -> Dict[str, Any]:
         """加载用户数据"""
@@ -40,7 +47,7 @@ class XiuXianData:
                 "level": 1,  # 修为等级
                 "exp": 0,    # 当前经验
                 "max_exp": 100,  # 升级所需经验
-                "realm": "练气期",  # 境界
+                "realm": "江湖好手",  # 境界
                 "last_practice_time": 0,  # 上次修炼时间
                 "spirit_stones": 100,  # 灵石
                 "items": [],  # 物品列表
@@ -67,6 +74,8 @@ class XiuXianData:
                 "status_reward_multiplier": 0,
                 "last_steal_time": 0,  # 上次偷窃时间
                 "last_duel_time": 0,  # 上次切磋时间
+                "last_breakthrough_time": 0,  # 上次突破时间
+                "breakthrough_bonus": 0,  # 突破加成
                 "inventory": {  # 物品栏
                     "pills": {}  # 丹药
                 }# 奖励倍数
@@ -100,26 +109,56 @@ class XiuXianData:
         self._save_data()
         return level_up_info
     
+    def _load_realms_config(self) -> List[Dict[str, Any]]:
+        """加载境界配置"""
+        try:
+            os.makedirs(os.path.dirname(self.realms_config_file), exist_ok=True)
+            if os.path.exists(self.realms_config_file):
+                with open(self.realms_config_file, "r", encoding="utf-8") as f:
+                    return json.load(f)["realms"]
+            else:
+                # 默认境界配置
+                default_realms = {
+                    "realms": [
+                        {"name": "江湖好手", "level": 56, "exp_required": 1000}
+                    ]
+                }
+                with open(self.realms_config_file, "w", encoding="utf-8") as f:
+                    json.dump(default_realms, f, ensure_ascii=False, indent=4)
+                return default_realms["realms"]
+        except Exception as e:
+            print(f"加载境界配置失败: {e}")
+            return []
+    
+    def _load_breakthrough_rates(self) -> Dict[str, float]:
+        """加载突破概率配置"""
+        try:
+            os.makedirs(os.path.dirname(self.breakthrough_rates_file), exist_ok=True)
+            if os.path.exists(self.breakthrough_rates_file):
+                with open(self.breakthrough_rates_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            else:
+                # 默认突破概率配置
+                default_rates = {"江湖好手": 0.95}
+                with open(self.breakthrough_rates_file, "w", encoding="utf-8") as f:
+                    json.dump(default_rates, f, ensure_ascii=False, indent=4)
+                return default_rates
+        except Exception as e:
+            print(f"加载突破概率配置失败: {e}")
+            return {}
+    
     def _get_realm_by_level(self, level: int) -> str:
         """根据等级获取对应的境界"""
-        realms = [
-            (1, "练气期"),
-            (10, "筑基期"),
-            (20, "金丹期"),
-            (30, "元婴期"),
-            (40, "化神期"),
-            (50, "炼虚期"),
-            (60, "合体期"),
-            (70, "大乘期"),
-            (80, "渡劫期"),
-            (90, "仙人")
-        ]
+        if not self.realms_config:
+            # 如果没有加载到配置，使用默认境界
+            return "江湖好手"
         
-        for lvl, realm in reversed(realms):
-            if level >= lvl:
-                return realm
+        for realm in self.realms_config:
+            if realm["level"] == level:
+                return realm["name"]
         
-        return "凡人"
+        # 如果没有找到对应等级的境界，返回默认境界
+        return "江湖好手"
     
     def add_spirit_stones(self, user_id: str, amount: int) -> int:
         """增加或减少灵石"""
@@ -127,6 +166,136 @@ class XiuXianData:
         user["spirit_stones"] += amount
         self._save_data()
         return user["spirit_stones"]
+    
+    def get_next_realm(self, user_id: str) -> Dict[str, Any]:
+        """获取用户下一境界信息"""
+        user = self.get_user(user_id)
+        current_realm = user["realm"]
+        
+        # 查找当前境界在配置中的位置
+        current_index = -1
+        for i, realm in enumerate(self.realms_config):
+            if realm["name"] == current_realm:
+                current_index = i
+                break
+        
+        # 如果找不到当前境界或已是最高境界，返回None
+        if current_index == -1 or current_index == 0:  # 注意：最高境界的索引是0（因为按等级值从高到低排序）
+            return {
+                "has_next": False,
+                "message": "你已达到最高境界，无法继续突破。"
+            }
+        
+        # 获取下一境界信息
+        next_realm = self.realms_config[current_index - 1]
+        
+        # 计算所需修为
+        exp_required = next_realm["exp_required"]
+        current_exp = user["exp"]
+        
+        # 检查修为是否足够
+        can_breakthrough = current_exp >= exp_required
+        
+        # 检查CD时间
+        current_time = int(time.time())
+        cd_remaining = 0
+        if current_time - user.get("last_breakthrough_time", 0) < 3600:  # 1小时CD
+            cd_remaining = 3600 - (current_time - user.get("last_breakthrough_time", 0))
+        
+        return {
+            "has_next": True,
+            "next_realm": next_realm["name"],
+            "exp_required": exp_required,
+            "current_exp": current_exp,
+            "can_breakthrough": can_breakthrough,
+            "cd_remaining": cd_remaining,
+            "breakthrough_rate": self.breakthrough_rates.get(current_realm, 0.5)  # 默认0.5
+        }
+    
+    def breakthrough(self, user_id: str, use_pill: bool = False) -> Dict[str, Any]:
+        """尝试突破到下一境界"""
+        user = self.get_user(user_id)
+        next_realm_info = self.get_next_realm(user_id)
+        
+        # 检查是否有下一境界
+        if not next_realm_info["has_next"]:
+            return {
+                "success": False,
+                "message": next_realm_info["message"]
+            }
+        
+        # 检查CD时间
+        if next_realm_info["cd_remaining"] > 0:
+            minutes = next_realm_info["cd_remaining"] // 60
+            seconds = next_realm_info["cd_remaining"] % 60
+            return {
+                "success": False,
+                "message": f"突破冷却中，需等待 {minutes}分{seconds}秒"
+            }
+        
+        # 检查修为是否足够
+        if not next_realm_info["can_breakthrough"]:
+            return {
+                "success": False,
+                "message": f"修为不足，无法突破。当前修为：{next_realm_info['current_exp']}，需要：{next_realm_info['exp_required']}"
+            }
+        
+        # 计算突破概率
+        base_rate = next_realm_info["breakthrough_rate"]
+        # 加上突破加成（如果有）
+        bonus_rate = user.get("breakthrough_bonus", 0)
+        final_rate = min(0.95, base_rate + bonus_rate)  # 最高95%成功率
+        
+        # 决定是否突破成功
+        is_success = random.random() < final_rate
+        
+        # 更新最后突破时间
+        user["last_breakthrough_time"] = int(time.time())
+        
+        result = {
+            "success": True,
+            "is_breakthrough_success": is_success,
+            "old_realm": user["realm"],
+            "new_realm": next_realm_info["next_realm"] if is_success else user["realm"],
+            "exp_loss": 0,
+            "message": ""
+        }
+        
+        if is_success:
+            # 突破成功，更新境界
+            user["realm"] = next_realm_info["next_realm"]
+            # 消耗修为
+            user["exp"] -= next_realm_info["exp_required"]
+            # 重置突破加成
+            user["breakthrough_bonus"] = 0
+            
+            result["message"] = f"恭喜突破成功！你的境界提升为【{user['realm']}】"
+        else:
+            # 突破失败
+            if not use_pill:  # 如果没有使用渡厄丹
+                # 随机扣减1%-10%的修为
+                exp_loss_percent = random.uniform(0.01, 0.1)
+                exp_loss = int(user["exp"] * exp_loss_percent)
+                user["exp"] = max(0, user["exp"] - exp_loss)
+                
+                # 增加下次突破成功率
+                bonus_increase = base_rate * 0.3  # 当前境界基础突破概率的30%
+                user["breakthrough_bonus"] += bonus_increase
+                
+                result["exp_loss"] = exp_loss
+                result["message"] = f"突破失败！损失了 {exp_loss} 点修为，但下次突破成功率提高了 {bonus_increase*100:.1f}%"
+            else:
+                # 使用了渡厄丹，不损失修为
+                # 增加下次突破成功率
+                bonus_increase = base_rate * 0.3  # 当前境界基础突破概率的30%
+                user["breakthrough_bonus"] += bonus_increase
+                
+                result["message"] = f"虽然突破失败，但由于使用了渡厄丹，没有损失修为。下次突破成功率提高了 {bonus_increase*100:.1f}%"
+        
+        # 更新用户数据
+        self.update_user(user_id, user)
+        
+        return result
     
     def get_all_users(self) -> Dict[str, Any]:
         """获取所有用户数据"""
@@ -561,7 +730,7 @@ class XiuXianData:
         
         # 丹药列表及其效果
         all_pills = {
-            "渡厄丹": {"level": 5, "cost": 200, "description": "服用后可恢复少量修为，突破瓶颈", "effect": {"exp": 50}},
+            "渡厄丹": {"level": 5, "cost": 200, "description": "服用后可恢复少量修为，突破瓶颈", "effect": {"exp": 50}, "breakthrough_bonus": 0.1},
             "聚气丹": {"level": 15, "cost": 500, "description": "服用后可恢复中量修为，提升修炼速度", "effect": {"exp": 150}},
             "回春丹": {"level": 25, "cost": 1000, "description": "服用后可恢复大量修为，延年益寿", "effect": {"exp": 300}},
             "洗髓丹": {"level": 35, "cost": 2000, "description": "服用后可洗髓伐毛，重塑根基", "effect": {"exp": 500}},
@@ -575,29 +744,33 @@ class XiuXianData:
                 "message": f"没有找到名为 {pill_name} 的丹药。"
             }
         
-        # 检查是否拥有该丹药
+        # 检查用户是否拥有该丹药
         if "pills" not in user["inventory"] or pill_name not in user["inventory"]["pills"] or user["inventory"]["pills"][pill_name] <= 0:
             return {
                 "success": False,
-                "message": f"你没有 {pill_name}，无法使用。"
+                "message": f"你没有 {pill_name}，请先购买。"
             }
         
-        # 获取丹药效果
+        # 获取丹药信息
         pill = all_pills[pill_name]
+        
+        # 从库存中移除丹药
+        user["inventory"]["pills"][pill_name] -= 1
         
         # 应用丹药效果
         exp_gain = pill["effect"]["exp"]
+        message = f"你服用了 {pill_name}，获得了 {exp_gain} 点修为。"
+        
+        # 如果丹药有突破加成，应用到用户身上
+        if "breakthrough_bonus" in pill:
+            user["breakthrough_bonus"] = pill["breakthrough_bonus"]
+            message += f"\n丹药效果：下次突破成功率提升 {int(pill['breakthrough_bonus'] * 100)}%。"
+        
+        # 增加经验并检查是否升级
         level_up_info = self.add_exp(user_id, exp_gain)
         
-        # 减少丹药数量
-        user["inventory"]["pills"][pill_name] -= 1
-        if user["inventory"]["pills"][pill_name] <= 0:
-            del user["inventory"]["pills"][pill_name]
-        
+        # 更新用户数据
         self.update_user(user_id, user)
-        
-        # 构建结果消息
-        message = f"你服用了 {pill_name}，获得了 {exp_gain} 点修为！"
         
         # 如果升级了，添加升级信息
         if level_up_info["leveled_up"]:
@@ -886,13 +1059,13 @@ class XiuXianData:
         return result
     
     # ===== 状态系统相关 =====
-    def set_status(self, user_id: str, status_type: str, duration_hours: int) -> Dict[str, Any]:
+    def set_status(self, user_id: str, status_type: str, duration_hours: float) -> Dict[str, Any]:
         """设置用户状态
         
         Args:
             user_id: 用户ID
             status_type: 状态类型，可选值：'修炼中'、'探索中'、'收集灵石中'
-            duration_hours: 持续时间（小时），范围1-3小时
+            duration_hours: 持续时间（小时），可以是小数表示小时和分钟，范围0.1-6小时
             
         Returns:
             包含状态信息的字典
@@ -910,12 +1083,12 @@ class XiuXianData:
                 "message": f"你当前正处于{user['status']}状态，还需 {hours}小时{minutes}分钟 结束"
             }
         
-        # 限制持续时间在1-3小时之间
-        duration_hours = max(1, min(3, duration_hours))
-        duration_seconds = duration_hours * 3600
+        # 限制持续时间在0.1-6小时之间
+        # duration_hours = max(0.1, min(6, duration_hours))
+        duration_seconds = int(duration_hours * 3600)
         
         # 计算奖励倍数（时间越长，奖励越多）
-        reward_multiplier = duration_hours
+        reward_multiplier = duration_hours + 1
         
         # 设置状态
         user["status"] = status_type
@@ -925,6 +1098,8 @@ class XiuXianData:
         user["status_reward_multiplier"] = reward_multiplier
         
         self.update_user(user_id, user)
+        
+        logger.info(f"用户 ({user_id}) 进入了 {status_type} 状态，开始时间：{current_time}，结束时间：{user['status_end_time']}")
         
         return {
             "success": True,
@@ -973,6 +1148,7 @@ class XiuXianData:
         
         # 如果状态未结束
         if current_time < user["status_end_time"]:
+            logger.info(f"current_time: {current_time}, user['status_end_time']: {user['status_end_time']}")
             remaining = user["status_end_time"] - current_time
             hours = remaining // 3600
             minutes = (remaining % 3600) // 60

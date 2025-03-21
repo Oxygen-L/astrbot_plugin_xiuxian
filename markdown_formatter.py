@@ -171,7 +171,7 @@ class MarkdownFormatter:
         """
         result = f"## ⏳ 闭关修炼\n\n**{user_name}** 道友开始闭关修炼！\n\n"
         result += f"- 修炼时长: **{duration_hours}** 小时\n"
-        result += f"- 预计出关: **{end_time}**\n\n"
+        # result += f"- 预计出关: **{end_time}**\n\n"
         result += "> *修炼时间越长，获得的修为越多，请耐心等待。*\n\n"
         result += "> *修炼结束后，你将获得丰厚的修为奖励！*"
         
@@ -184,7 +184,7 @@ class MarkdownFormatter:
         """
         result = f"## 🔍 秘境探索\n\n**{user_name}** 道友开始进入秘境探索！\n\n"
         result += f"- 探索时长: **{duration_hours}** 小时\n"
-        result += f"- 预计归来: **{end_time}**\n\n"
+        # result += f"- 预计归来: **{end_time}**\n\n"
         result += "> *探索时间越长，获得的奖励越丰厚，但风险也越大，请耐心等待。*\n\n"
         result += "> *探索结束后，你将获得丰厚的奖励！*"
         
@@ -197,7 +197,29 @@ class MarkdownFormatter:
         """
         result = f"## 💎 灵石收集\n\n**{user_name}** 道友开始收集灵石！\n\n"
         result += f"- 收集时长: **{duration_hours}** 小时\n"
-        result += f"- 预计完成: **{end_time}**\n\n"
+        # result += f"- 预计完成: **{end_time}**\n\n"
+        return result
+        
+    @staticmethod
+    def format_breakthrough_result(user_name, result):
+        """
+        格式化突破结果
+        """
+        if result["is_breakthrough_success"]:
+            # 突破成功
+            output = f"## 🎉 突破成功！\n\n**{user_name}** 道友突破成功！\n\n"
+            output += f"- 原境界: **{result['old_realm']}**\n"
+            output += f"- 新境界: **{result['new_realm']}**\n\n"
+            output += "> *恭喜道友修为精进，境界提升！*\n"
+        else:
+            # 突破失败
+            output = f"## ⚠️ 突破失败\n\n**{user_name}** 道友突破失败！\n\n"
+            if result["exp_loss"] > 0:
+                output += f"- 损失修为: **{result['exp_loss']}**\n"
+            output += f"- 当前境界: **{result['old_realm']}**\n\n"
+            output += "> *道友不必灰心，继续修炼，终有所成！*\n"
+        
+        return output
         result += "> *收集时间越长，获得的灵石越多，请耐心等待。*\n\n"
         result += "> *收集结束后，你将获得丰厚的灵石奖励！*"
         
