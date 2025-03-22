@@ -562,13 +562,15 @@ class XiuXianPlugin(Star):
         all_users = self.data_manager.get_all_users()
         
         if target_id not in all_users:
-            yield event.plain_result(f"道友 {user_name}，找不到名为 {target_name} 的修仙者。")
+            yield event.plain_result(f"道友 {user_name}，找不到这位修仙者。")
             return
         
         # 不能与自己切磋
         if target_id == user_id:
             yield event.plain_result(f"道友 {user_name}，你不能与自己切磋。")
             return
+        
+        target_name = all_users[target_id]["username"]
         
         # 调用数据管理器的切磋方法
         result = self.data_manager.duel(user_id, target_id)
@@ -613,13 +615,15 @@ class XiuXianPlugin(Star):
         all_users = self.data_manager.get_all_users()
 
         if target_id not in all_users:
-            yield event.plain_result(f"道友 {user_name}，找不到名为 {target_name} 的修仙者。")
+            yield event.plain_result(f"道友 {user_name}，找不到这位修仙者。")
             return
         
         # 不能偷自己的灵石
         if target_id == user_id:
             yield event.plain_result(f"道友 {user_name}，你不能偷取自己的灵石。")
             return
+
+        target_name = all_users[target_id]["username"]
         
         # 调用数据管理器的偷灵石方法
         result = self.data_manager.steal_spirit_stones(user_id, target_id)
