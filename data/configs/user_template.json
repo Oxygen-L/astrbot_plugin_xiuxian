@@ -1,0 +1,43 @@
+{
+    "_comment": "用户模板配置文件，定义了游戏中玩家角色的初始属性和状态",
+    "level": 1, "_comment_level": "玩家当前等级，初始为1级",
+    "exp": 0, "_comment_exp": "当前拥有的修为值，初始为0",
+    "max_exp": 1000, "_comment_max_exp": "当前等级所需的最大修为值，达到后可以突破",
+    "realm": "江湖好手", "_comment_realm": "玩家当前的境界名称，初始为江湖好手",
+    "last_practice_time": 0, "_comment_last_practice_time": "上次修炼的时间戳，用于计算修炼冷却时间",
+    "spirit_stones": 100, "_comment_spirit_stones": "玩家拥有的灵石数量，游戏中的货币，初始为100",
+    "items": [], "_comment_items": "玩家拥有的物品列表，初始为空",
+    "techniques": [], "_comment_techniques": "玩家掌握的功法列表，初始为空",
+    "username": "", "_comment_username": "玩家的用户名，初始为空",
+    "equipment": {
+        "_comment": "玩家装备栏，包含武器、防具和饰品",
+        "weapon": null, "_comment_weapon": "当前装备的武器，初始为空",
+        "armor": null, "_comment_armor": "当前装备的防具，初始为空",
+        "accessory": null, "_comment_accessory": "当前装备的饰品，初始为空"
+    },
+    "stats": {
+        "_comment": "玩家基础属性，包含攻击力、防御力和生命值",
+        "attack": 10, "_comment_attack": "攻击力，影响战斗伤害，初始为10",
+        "defense": 10, "_comment_defense": "防御力，减少受到的伤害，初始为10",
+        "hp": 100, "_comment_hp": "当前生命值，初始为100",
+        "max_hp": 100, "_comment_max_hp": "最大生命值，初始为100"
+    },
+    "last_adventure_time": 0, "_comment_last_adventure_time": "上次冒险的时间戳，用于计算冒险冷却时间",
+    "last_mine_time": 0, "_comment_last_mine_time": "上次挖矿的时间戳，用于计算挖矿冷却时间",
+    "last_daily_time": 0, "_comment_last_daily_time": "上次领取每日奖励的时间戳",
+    "status": null, "_comment_status": "玩家当前状态，如修炼、闭关等，初始为空",
+    "status_end_time": 0, "_comment_status_end_time": "当前状态结束的时间戳",
+    "status_start_time": 0, "_comment_status_start_time": "当前状态开始的时间戳",
+    "status_duration": 0, "_comment_status_duration": "当前状态持续的时间（秒）",
+    "status_reward_multiplier": 0, "_comment_status_reward_multiplier": "当前状态的奖励倍率",
+    "last_steal_time": 0, "_comment_last_steal_time": "上次偷窃的时间戳，用于计算偷窃冷却时间",
+    "last_duel_time": 0, "_comment_last_duel_time": "上次决斗的时间戳，用于计算决斗冷却时间",
+    "last_breakthrough_time": 0, "_comment_last_breakthrough_time": "上次突破的时间戳，用于计算突破冷却时间",
+    "breakthrough_bonus": 0, "_comment_breakthrough_bonus": "突破获得的额外奖励",
+    "inventory": {
+        "_comment": "玩家的库存，存储各类物品",
+        "pills": {}, "_comment_pills": "玩家拥有的丹药，格式为{丹药ID: 数量}"
+    },
+    "has_started": false, "_comment_has_started": "玩家是否已开始游戏，初始为false",
+    "daily_streak": 0, "_comment_daily_streak": "连续签到天数，用于计算签到奖励"
+}

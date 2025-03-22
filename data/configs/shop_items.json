@@ -1,0 +1,67 @@
+{
+    "_comment": "商店物品配置文件，定义了游戏中可购买的功法、丹药和装备",
+    "techniques": {
+        "_comment": "功法列表，定义了各种可学习的功法及其属性",
+        "吐纳术": {"level": 1, "cost": 150, "description": "基础呼吸法，提升修炼速度"},
+        "_comment_吐纳术": "1级功法，需要150灵石购买，适合初学者",
+        "御风术": {"level": 5, "cost": 450, "description": "掌控风元素，提升移动速度"},
+        "_comment_御风术": "5级功法，需要450灵石购买，需要达到搬血境初期才能学习",
+        "小周天功": {"level": 10, "cost": 1000, "description": "打通周身经脉，增强修炼效率"},
+        "_comment_小周天功": "10级功法，需要1000灵石购买，需要达到化灵境初期才能学习",
+        "金刚不坏": {"level": 15, "cost": 2000, "description": "强化体魄，提高防御力"},
+        "_comment_金刚不坏": "15级功法，需要2000灵石购买，需要达到列阵境初期才能学习",
+        "五行遁法": {"level": 20, "cost": 4000, "description": "掌握五行之力，提高闪避能力"},
+        "_comment_五行遁法": "20级功法，需要4000灵石购买，需要达到神火境初期才能学习",
+        "太极剑法": {"level": 25, "cost": 7000, "description": "刚柔并济的剑法，提高攻击力"},
+        "_comment_太极剑法": "25级功法，需要7000灵石购买，需要达到真一境初期才能学习",
+        "大周天功": {"level": 30, "cost": 12000, "description": "贯通全身经脉，大幅提升修炼效率"},
+        "_comment_大周天功": "30级功法，需要12000灵石购买，需要达到天神境初期才能学习",
+        "九阳神功": {"level": 40, "cost": 25000, "description": "至阳至刚的功法，全面提升各项属性"},
+        "_comment_九阳神功": "40级功法，需要25000灵石购买，需要达到遁一境初期才能学习",
+        "乾坤大挪移": {"level": 50, "cost": 50000, "description": "移星换斗的神功，可借力打力"},
+        "_comment_乾坤大挪移": "50级功法，需要50000灵石购买，需要达到准帝境初期才能学习"
+    },
+    "pills": {
+        "_comment": "丹药列表，定义了各种可购买的丹药及其效果",
+        "渡厄丹": {"level": 5, "cost": 300, "description": "服用后可提升少量修为，突破瓶颈", "effect": {"exp": 100}, "breakthrough_bonus": 0.15},
+        "_comment_渡厄丹": "5级丹药，需要300灵石购买，服用后增加100点修为，提升15%突破成功率",
+        "聚气丹": {"level": 15, "cost": 800, "description": "服用后可提升中量修为，提升修炼速度", "effect": {"exp": 300}, "breakthrough_bonus": 0.1},
+        "_comment_聚气丹": "15级丹药，需要800灵石购买，服用后增加300点修为，提升10%突破成功率",
+        "回春丹": {"level": 25, "cost": 1800, "description": "服用后可提升大量修为，延年益寿", "effect": {"exp": 600}, "breakthrough_bonus": 0.08},
+        "_comment_回春丹": "25级丹药，需要1800灵石购买，服用后增加600点修为，提升8%突破成功率",
+        "洗髓丹": {"level": 35, "cost": 3500, "description": "服用后可洗髓伐毛，重塑根基", "effect": {"exp": 1200}, "breakthrough_bonus": 0.05},
+        "_comment_洗髓丹": "35级丹药，需要3500灵石购买，服用后增加1200点修为，提升5%突破成功率",
+        "金元丹": {"level": 45, "cost": 8000, "description": "服用后可大幅提升修为，改善体质", "effect": {"exp": 2500}, "breakthrough_bonus": 0.03},
+        "_comment_金元丹": "45级丹药，需要8000灵石购买，服用后增加2500点修为，提升3%突破成功率"
+    },
+    "equipment": {
+        "_comment": "装备列表，包含武器、防具和饰品三大类",
+        "weapon": [
+            {"id": "w1", "name": "木剑", "level": 1, "cost": 200, "attack": 10, "description": "普通的木制剑，适合初学者使用"},
+            {"id": "w2", "name": "铁剑", "level": 5, "cost": 600, "attack": 25, "description": "坚固的铁剑，具有不错的攻击力"},
+            {"id": "w3", "name": "青锋剑", "level": 10, "cost": 1500, "attack": 50, "description": "锋利的精钢宝剑，削铁如泥"},
+            {"id": "w4", "name": "赤焰剑", "level": 20, "cost": 4000, "attack": 100, "description": "蕴含火属性的法剑，可灼烧敌人"},
+            {"id": "w5", "name": "紫电神剑", "level": 30, "cost": 10000, "attack": 200, "description": "雷属性神兵，攻击带有麻痹效果"},
+            {"id": "w6", "name": "太虚剑", "level": 50, "cost": 30000, "attack": 400, "description": "传说中的仙家宝剑，锋利无比"}
+        ],
+        "_comment_weapon": "武器列表，提供攻击力加成，等级越高攻击力越高",
+        "armor": [
+            {"id": "a1", "name": "布衣", "level": 1, "cost": 200, "defense": 8, "description": "普通的布制衣服，提供基础防护"},
+            {"id": "a2", "name": "皮甲", "level": 5, "cost": 600, "defense": 20, "description": "用兽皮制成的护甲，提供较好的防护"},
+            {"id": "a3", "name": "铁甲", "level": 10, "cost": 1500, "defense": 40, "description": "坚固的铁制护甲，大幅提升防御力"},
+            {"id": "a4", "name": "玄冰甲", "level": 20, "cost": 4000, "defense": 80, "description": "蕴含冰属性的法甲，可抵御火属性攻击"},
+            {"id": "a5", "name": "金刚甲", "level": 30, "cost": 10000, "defense": 160, "description": "坚不可摧的护甲，大幅提升生存能力"},
+            {"id": "a6", "name": "仙云法衣", "level": 50, "cost": 30000, "defense": 320, "description": "仙家法衣，轻若无物却防御惊人"}
+        ],
+        "_comment_armor": "防具列表，提供防御力加成，等级越高防御力越高",
+        "accessory": [
+            {"id": "ac1", "name": "木质护符", "level": 1, "cost": 200, "hp": 50, "description": "简单的护身符，略微增加生命值"},
+            {"id": "ac2", "name": "玉佩", "level": 5, "cost": 600, "hp": 120, "description": "蕴含灵气的玉佩，提升生命值"},
+            {"id": "ac3", "name": "灵珠", "level": 10, "cost": 1500, "hp": 250, "description": "凝聚灵气的宝珠，大幅提升生命值"},
+            {"id": "ac4", "name": "聚灵环", "level": 20, "cost": 4000, "hp": 500, "description": "聚集周围灵气的法器，显著提升生命值"},
+            {"id": "ac5", "name": "龙血石", "level": 30, "cost": 10000, "hp": 1000, "description": "蕴含龙族精血的宝石，极大提升生命力"},
+            {"id": "ac6", "name": "仙灵珠", "level": 50, "cost": 30000, "hp": 2000, "description": "仙界宝物，拥有强大的生命力"}
+        ],
+        "_comment_accessory": "饰品列表，提供生命值加成，等级越高生命值加成越高"
+    }
+}

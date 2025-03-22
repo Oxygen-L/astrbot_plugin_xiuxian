@@ -1,0 +1,120 @@
+{
+    "_comment": "秘境探索事件配置文件，定义了探索过程中可能发生的事件、奖惩机制和相关参数",
+    "event_types": ["treasure", "herb", "monster", "opportunity"],
+    "_comment_event_types": "可能触发的事件类型列表，系统会随机选择其中一种",
+    "punishment": {
+        "_comment": "惩罚事件相关配置，定义了探索失败时的惩罚机制",
+        "chance": 0.1,
+        "_comment_chance": "触发惩罚事件的概率，范围0-1，当前为10%",
+        "events": [
+            "遭遇强敌袭击",
+            "踩入陷阱",
+            "中了毒雾",
+            "触发阵法反噬",
+            "引来天劫"
+        ],
+        "_comment_events": "可能发生的惩罚事件列表，系统会随机选择其中一种",
+        "spirit_stones_loss": {
+            "_comment": "惩罚事件导致的灵石损失计算参数",
+            "min_multiplier": 5,
+            "_comment_min_multiplier": "最小损失倍率，实际损失 = 玩家等级 × 此值",
+            "max_multiplier": 15,
+            "_comment_max_multiplier": "最大损失倍率，实际损失 = 玩家等级 × 此值"
+        },
+        "exp_loss": {
+            "_comment": "惩罚事件导致的修为损失计算参数",
+            "min_multiplier": 2,
+            "_comment_min_multiplier": "最小损失倍率，实际损失 = 玩家等级 × 此值",
+            "max_multiplier": 5,
+            "_comment_max_multiplier": "最大损失倍率，实际损失 = 玩家等级 × 此值"
+        }
+    },
+    "treasure": {
+        "_comment": "宝藏事件相关配置，定义了发现宝藏时的奖励机制",
+        "spirit_stones_gain": {
+            "_comment": "宝藏事件灵石奖励计算参数",
+            "min_multiplier": 10,
+            "_comment_min_multiplier": "最小奖励倍率，实际奖励 = 玩家等级 × 此值",
+            "max_multiplier": 30,
+            "_comment_max_multiplier": "最大奖励倍率，实际奖励 = 玩家等级 × 此值"
+        },
+        "messages": [
+            "你在秘境中发现了一处宝藏，获得了 {spirit_stones} 灵石！",
+            "你意外发现一个隐秘洞穴，里面堆满了灵石，获得了 {spirit_stones} 灵石！",
+            "你找到了一个古老的储物袋，里面有 {spirit_stones} 灵石！"
+        ],
+        "_comment_messages": "宝藏事件的提示消息，{spirit_stones}会被替换为实际获得的灵石数量"
+    },
+    "herb": {
+        "_comment": "草药事件相关配置，定义了发现草药时的奖励机制",
+        "items": [
+            "灵草",
+            "灵芝",
+            "仙参",
+            "龙血草",
+            "九转还魂草"
+        ],
+        "_comment_items": "可能发现的草药列表，系统会随机选择其中一种",
+        "messages": [
+            "你在秘境中发现了珍贵的 {herb}！",
+            "你在一处幽静之地发现了一株 {herb}！",
+            "你眼前一亮，发现了一株罕见的 {herb}！"
+        ],
+        "_comment_messages": "草药事件的提示消息，{herb}会被替换为实际获得的草药名称"
+    },
+    "monster": {
+        "_comment": "妖兽事件相关配置，定义了遭遇妖兽时的战斗机制",
+        "names": [
+            "山猪",
+            "赤焰狐",
+            "黑风狼",
+            "幽冥蛇",
+            "雷霆鹰"
+        ],
+        "_comment_names": "可能遭遇的妖兽列表，系统会随机选择其中一种",
+        "win_messages": [
+            "你在秘境中遇到了 {monster}，经过一番激战，你成功击败了它！\n获得了 {exp_gain} 点修为和 {spirit_stones} 灵石！",
+            "你与 {monster} 展开激烈战斗，最终将其击败！\n获得了 {exp_gain} 点修为和 {spirit_stones} 灵石！",
+            "你凭借高超的战斗技巧击败了 {monster}！\n获得了 {exp_gain} 点修为和 {spirit_stones} 灵石！"
+        ],
+        "_comment_win_messages": "战斗胜利的提示消息，{monster}、{exp_gain}和{spirit_stones}会被替换为实际值",
+        "lose_messages": [
+            "你在秘境中遇到了 {monster}，不敌其强大的实力，被迫撤退...\n下次再来挑战吧！",
+            "你与 {monster} 交手几回合后发现实力相差悬殊，只好暂时撤退...\n下次再来挑战吧！",
+            "你被 {monster} 的强大气势所震慑，不得不选择避其锋芒...\n下次再来挑战吧！"
+        ],
+        "_comment_lose_messages": "战斗失败的提示消息，{monster}会被替换为实际的妖兽名称"
+    },
+    "opportunity": {
+        "_comment": "机缘事件相关配置，定义了获得机缘时的奖励机制",
+        "events": [
+            "发现了一处修炼宝地",
+            "偶遇前辈指点",
+            "得到一篇功法残卷",
+            "悟道树下顿悟",
+            "天降灵雨洗礼"
+        ],
+        "_comment_events": "可能发生的机缘事件列表，系统会随机选择其中一种",
+        "exp_gain": {
+            "_comment": "机缘事件修为奖励计算参数",
+            "min_multiplier": 10,
+            "_comment_min_multiplier": "最小奖励倍率，实际奖励 = 玩家等级 × 此值",
+            "max_multiplier": 20,
+            "_comment_max_multiplier": "最大奖励倍率，实际奖励 = 玩家等级 × 此值"
+        },
+        "technique_chance": 0.2,
+        "_comment_technique_chance": "获得功法的概率，范围0-1，当前为20%",
+        "messages": [
+            "你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为！",
+            "你有幸在秘境中{opportunity}，修为大进！\n获得了 {exp_gain} 点修为！",
+            "机缘巧合下，你在秘境中{opportunity}！\n获得了 {exp_gain} 点修为！"
+        ],
+        "_comment_messages": "普通机缘事件的提示消息，{opportunity}和{exp_gain}会被替换为实际值",
+        "technique_messages": [
+            "你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为，并习得了 {technique}！",
+            "你有幸在秘境中{opportunity}，不仅修为大进，还领悟了一门功法！\n获得了 {exp_gain} 点修为，并习得了 {technique}！",
+            "天降奇缘，你在秘境中{opportunity}！\n获得了 {exp_gain} 点修为，并习得了 {technique}！"
+        ],
+        "_comment_technique_messages": "获得功法的机缘事件提示消息，{opportunity}、{exp_gain}和{technique}会被替换为实际值"
+    }
+}

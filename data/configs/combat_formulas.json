@@ -1,0 +1,71 @@
+{
+    "_comment": "战斗相关计算公式配置文件，定义了战斗力计算、胜率计算和伤害计算的参数",
+    "duel": {
+        "_comment": "切磋战斗相关参数配置",
+        "power_calculation": {
+            "_comment": "战力计算公式参数",
+            "level_multiplier": 12,
+            "_comment_level_multiplier": "等级乘数，战力计算中等级的权重",
+            "attack_weight": 1.2,
+            "_comment_attack_weight": "攻击属性权重，战力计算中攻击力的权重",
+            "defense_weight": 0.8,
+            "_comment_defense_weight": "防御属性权重，战力计算中防御力的权重"
+        },
+        "win_chance": {
+            "_comment": "胜率计算公式参数",
+            "base_chance": 0.5,
+            "_comment_base_chance": "基础胜率，双方战力相等时的胜率",
+            "power_diff_weight": 0.25,
+            "_comment_power_diff_weight": "战力差异权重，影响战力差异对胜率的影响程度",
+            "min_chance": 0.15,
+            "_comment_min_chance": "最低胜率，无论战力差距多大，胜率不会低于此值",
+            "max_chance": 0.85,
+            "_comment_max_chance": "最高胜率，无论战力差距多大，胜率不会高于此值"
+        }
+    },
+    "adventure": {
+        "_comment": "秘境探索战斗相关参数配置",
+        "monster_level": {
+            "_comment": "妖兽等级范围参数",
+            "min_level_diff": -3,
+            "_comment_min_level_diff": "最小等级差异，妖兽等级最低为玩家等级加此值",
+            "max_level_diff": 3,
+            "_comment_max_level_diff": "最大等级差异，妖兽等级最高为玩家等级加此值"
+        },
+        "win_chance": {
+            "_comment": "秘境战斗胜率计算参数",
+            "base_chance": 0.6,
+            "_comment_base_chance": "基础胜率，双方等级相等时的胜率",
+            "level_diff_multiplier": 0.08,
+            "_comment_level_diff_multiplier": "等级差异乘数，影响等级差异对胜率的影响程度",
+            "min_chance": 0.2,
+            "_comment_min_chance": "最低胜率，无论等级差距多大，胜率不会低于此值",
+            "max_chance": 0.85,
+            "_comment_max_chance": "最高胜率，无论等级差距多大，胜率不会高于此值"
+        }
+    },
+    "stats": {
+        "_comment": "基础属性参数配置",
+        "base_attack": 15,
+        "_comment_base_attack": "基础攻击力，新角色的初始攻击力",
+        "base_defense": 12,
+        "_comment_base_defense": "基础防御力，新角色的初始防御力",
+        "base_hp": 100,
+        "_comment_base_hp": "基础生命值，新角色的初始生命值",
+        "level_attack_bonus": 3,
+        "_comment_level_attack_bonus": "等级攻击加成，每提升一级增加的攻击力",
+        "level_defense_bonus": 2.5,
+        "_comment_level_defense_bonus": "等级防御加成，每提升一级增加的防御力",
+        "level_hp_bonus": 15,
+        "_comment_level_hp_bonus": "等级生命加成，每提升一级增加的生命值"
+    },
+    "damage": {
+        "_comment": "伤害计算相关参数配置",
+        "base_formula": "attacker_attack * (1 - defender_defense / (defender_defense + 150))",
+        "_comment_base_formula": "基础伤害计算公式，攻击者攻击力乘以防御减免系数",
+        "critical_chance": 0.15,
+        "_comment_critical_chance": "暴击概率，范围0-1，当前为15%",
+        "critical_multiplier": 2.2,
+        "_comment_critical_multiplier": "暴击倍率，触发暴击时伤害乘以此值"
+    }
+}

@@ -1,0 +1,53 @@
+{
+    "_comment": "挖矿事件配置文件，定义了挖矿过程中可能发生的事件、奖惩机制和相关参数",
+    "punishment": {
+        "_comment": "惩罚事件相关配置，定义了挖矿失败时的惩罚机制",
+        "chance": 0.1,
+        "_comment_chance": "触发惩罚事件的概率，范围0-1，当前为10%",
+        "events": [
+            "矿洞坍塌",
+            "遭遇矿妖袭击",
+            "触发禁制陷阱",
+            "灵石爆炸",
+            "挖到诅咒石"
+        ],
+        "_comment_events": "可能发生的惩罚事件列表，系统会随机选择其中一种",
+        "spirit_stones_loss": {
+            "_comment": "惩罚事件导致的灵石损失计算参数",
+            "min_multiplier": 3,
+            "_comment_min_multiplier": "最小损失倍率，实际损失 = 玩家等级 × 此值",
+            "max_multiplier": 10,
+            "_comment_max_multiplier": "最大损失倍率，实际损失 = 玩家等级 × 此值"
+        }
+    },
+    "success": {
+        "_comment": "成功挖矿相关配置，定义了挖矿成功时的奖励机制",
+        "base_stones": 10,
+        "_comment_base_stones": "基础灵石奖励数量",
+        "level_bonus_multiplier": 2,
+        "_comment_level_bonus_multiplier": "等级奖励倍率，额外奖励 = 玩家等级 × 此值",
+        "random_range": [-5, 10],
+        "_comment_random_range": "随机波动范围，最终奖励会在此范围内随机增减",
+        "min_stones": 5,
+        "_comment_min_stones": "最低保底灵石数量，无论如何都至少获得这么多",
+        "critical": {
+            "_comment": "暴击机制配置，定义了挖矿暴击的概率和奖励倍率",
+            "chance": 0.1,
+            "_comment_chance": "暴击触发概率，范围0-1，当前为10%",
+            "multiplier": 3,
+            "_comment_multiplier": "暴击倍率，触发暴击时灵石奖励乘以此值"
+        },
+        "messages": [
+            "你辛勤地挖掘矿石，获得了 {stones} 灵石。",
+            "你在矿洞中发现了一些灵石，获得了 {stones} 灵石。",
+            "经过一番努力，你挖到了 {stones} 灵石。"
+        ],
+        "_comment_messages": "普通挖矿成功的提示消息，{stones}会被替换为实际获得的灵石数量",
+        "critical_messages": [
+            "运气爆棚！你在矿洞中发现了一条灵石矿脉，获得了 {stones} 灵石！",
+            "天降福缘！你挖到了一块超大灵石，价值 {stones} 灵石！",
+            "机缘巧合！你发现了前人遗留的灵石宝藏，获得了 {stones} 灵石！"
+        ],
+        "_comment_critical_messages": "暴击挖矿成功的提示消息，{stones}会被替换为实际获得的灵石数量"
+    }
+}
