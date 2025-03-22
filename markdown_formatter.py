@@ -40,7 +40,7 @@ class MarkdownFormatter:
         return f"## 🎉 欢迎踏上修仙之路！\n\n**{user_name}** 道友，你已成功踏入修仙世界！\n\n💎 初始灵石: **{spirit_stones}** 枚\n\n可使用 `/修仙帮助` 查看所有可用指令。\n\n> *祝你修仙之路一帆风顺，早日飞升成仙！*"
     
     @staticmethod
-    def format_user_info(user_name, user_data, status_info=None):
+    def format_user_info(user_name, user_data, all_equipment, status_info=None):
         """
         格式化用户信息
         """
@@ -55,7 +55,7 @@ class MarkdownFormatter:
         info += "| 属性 | 数值 |\n| --- | --- |\n"
         info += f"| 境界 | **{user_data['realm']}** |\n"
         info += f"| 修为等级 | {user_data['level']} |\n"
-        info += f"| 经验 | {user_data['exp']}/{user_data['max_exp']} |\n"
+        info += f"| 详细修为 | {user_data['exp']}/{user_data['max_exp']} |\n"
         info += f"| 灵石 | 💎 {user_data['spirit_stones']} |\n"
         info += f"| 战力 | ⚔️ {battle_power} |\n"
         
@@ -66,9 +66,6 @@ class MarkdownFormatter:
             info += f"| 攻击力 | {user_data['stats'].get('attack', 0)} |\n"
             info += f"| 防御力 | {user_data['stats'].get('defense', 0)} |\n"
             info += f"| 生命值 | {user_data['stats'].get('hp', 0)}/{user_data['stats'].get('max_hp', 100)} |\n"
-        
-        # 装备信息
-        all_equipment = XiuXianData.get_equipment_list()
         
         if "equipment" in user_data and any(user_data["equipment"].values()):
             info += "\n### 🔮 装备信息\n"
@@ -220,6 +217,58 @@ class MarkdownFormatter:
             output += "> *道友不必灰心，继续修炼，终有所成！*\n"
         
         return output
+    
+    @staticmethod
+    def format_breakthrough_info(user_name, next_realm_info):
+        """
+        格式化突破信息
+        """
+        if not next_realm_info["has_next"]:
+            return f"## ⚠️ 无法突破\n\n**{user_name}** 道友，{next_realm_info['message']}"
+        
+        # 检查CD时间
+        cd_info = ""
+        if next_realm_info["cd_remaining"] > 0:
+            minutes = next_realm_info["cd_remaining"] // 60
+            seconds = next_realm_info["cd_remaining"] % 60
+            cd_info = f"- 冷却时间: **{minutes}分{seconds}秒**\n"
+        
+        # 检查修为是否足够
+        exp_info = ""
+        if next_realm_info["can_breakthrough"]:
+            exp_info = f"- 修为状态: **充足** (当前: {next_realm_info['current_exp']}/{next_realm_info['exp_required']})\n"
+        else:
+            exp_info = f"- 修为状态: **不足** (当前: {next_realm_info['current_exp']}/{next_realm_info['exp_required']})\n"
+        
+        # 突破成功率
+        rate = next_realm_info["breakthrough_rate"] * 100
+        
+        output = f"## 🔮 突破信息\n\n**{user_name}** 道友，你的突破信息如下：\n\n"
+        output += f"- 当前境界: **{next_realm_info['current_realm']}**\n"
+        output += f"- 下一境界: **{next_realm_info['next_realm']}**\n"
+        output += exp_info
+        output += f"- 基础成功率: **{rate:.1f}%**\n"
+        if cd_info:
+            output += cd_info
+        
+        if next_realm_info["can_breakthrough"] and next_realm_info["cd_remaining"] <= 0:
+            output += "\n> *道友可以尝试突破了，输入 /突破 开始突破！*\n"
+            output += "> *也可以使用渡厄丹辅助突破，失败时不会损失修为，输入 /突破 渡厄丹*\n"
+        elif not next_realm_info["can_breakthrough"]:
+            output += "\n> *道友修为不足，需要继续修炼积累更多修为。*\n"
+        elif next_realm_info["cd_remaining"] > 0:
+            output += "\n> *道友需要等待冷却时间结束后才能尝试突破。*\n"
+        
+        return output
+        
+    @staticmethod
+    def format_mining_start(user_name, duration_hours, end_time):
+        """
+        格式化开始收集灵石信息
+        """
+        result = f"## 💎 灵石收集\n\n**{user_name}** 道友开始收集灵石！\n\n"
+        result += f"- 收集时长: **{duration_hours}** 小时\n"
+        # result += f"- 预计完成: **{end_time}**\n\n"
         result += "> *收集时间越长，获得的灵石越多，请耐心等待。*\n\n"
         result += "> *收集结束后，你将获得丰厚的灵石奖励！*"
         

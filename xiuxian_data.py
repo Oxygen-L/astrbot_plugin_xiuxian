@@ -5,6 +5,8 @@ import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 from astrbot.api import logger
+from .config_loader import ConfigLoader
+from .utils import XiuXianUtils
 
 # 修仙游戏数据管理类
 class XiuXianData:
@@ -13,11 +15,14 @@ class XiuXianData:
         self.user_data_file = os.path.join(data_dir, "user_data.json")
         self.users = self._load_data()
         
-        # 加载境界配置
-        self.realms_config_file = os.path.join(data_dir, "configs", "realms.json")
-        self.breakthrough_rates_file = os.path.join(data_dir, "configs", "breakthrough_rates.json")
-        self.realms_config = self._load_realms_config()
-        self.breakthrough_rates = self._load_breakthrough_rates()
+        # 初始化配置加载器
+        config_dir = os.path.join(data_dir, "configs")
+        os.makedirs(config_dir, exist_ok=True)
+        self.config = ConfigLoader(config_dir)
+        
+        # 从配置加载器获取配置
+        self.realms_config = self.config.realms
+        self.breakthrough_rates = self.config.breakthrough_rates
     
     def _load_data(self) -> Dict[str, Any]:
         """加载用户数据"""
@@ -42,44 +47,36 @@ class XiuXianData:
     def get_user(self, user_id: str) -> Dict[str, Any]:
         """获取用户数据，如果不存在则创建"""
         if user_id not in self.users:
-            # 创建新用户数据
-            self.users[user_id] = {
-                "level": 1,  # 修为等级
-                "exp": 0,    # 当前经验
-                "max_exp": 100,  # 升级所需经验
-                "realm": "江湖好手",  # 境界
-                "last_practice_time": 0,  # 上次修炼时间
-                "spirit_stones": 100,  # 灵石
-                "items": [],  # 物品列表
-                "techniques": [],  # 功法列表
-                "username": "",  # 用户名称
-                "equipment": {  # 装备栏
-                    "weapon": None,
-                    "armor": None,
-                    "accessory": None
-                },
-                "stats": {  # 基础属性
-                    "attack": 10,
-                    "defense": 10,
-                    "hp": 100,
-                    "max_hp": 100
-                },
-                "last_adventure_time": 0,  # 上次探险时间
-                "last_mine_time": 0,  # 上次挖矿时间
-                "last_daily_time": 0,  # 上次每日签到时间
-                "status": None,  # 当前状态：修炼中、探索中、收集灵石中等
-                "status_end_time": 0,  # 状态结束时间
-                "status_start_time": 0,  # 状态开始时间
-                "status_duration": 0,  # 状态持续时间（小时）
-                "status_reward_multiplier": 0,
-                "last_steal_time": 0,  # 上次偷窃时间
-                "last_duel_time": 0,  # 上次切磋时间
-                "last_breakthrough_time": 0,  # 上次突破时间
-                "breakthrough_bonus": 0,  # 突破加成
-                "inventory": {  # 物品栏
-                    "pills": {}  # 丹药
-                }# 奖励倍数
-            }
+            # 从配置加载器获取用户模板并创建新用户数据
+            self.users[user_id] = self.config.user_template.copy()
+            # 确保必要的嵌套字典和列表存在
+            if "equipment" not in self.users[user_id]:
+                self.users[user_id]["equipment"] = {"weapon": None, "armor": None, "accessory": None}
+            if "stats" not in self.users[user_id]:
+                self.users[user_id]["stats"] = {"attack": 10, "defense": 10, "hp": 100, "max_hp": 100}
+            if "inventory" not in self.users[user_id]:
+                self.users[user_id]["inventory"] = {"pills": {}}
+            if "items" not in self.users[user_id]:
+                self.users[user_id]["items"] = []
+            if "techniques" not in self.users[user_id]:
+                self.users[user_id]["techniques"] = []
+            # 确保其他必要字段存在
+            self.users[user_id].setdefault("username", "")
+            self.users[user_id].setdefault("last_practice_time", 0)
+            self.users[user_id].setdefault("last_adventure_time", 0)
+            self.users[user_id].setdefault("last_mine_time", 0)
+            self.users[user_id].setdefault("last_daily_time", 0)
+            self.users[user_id].setdefault("status", None)
+            self.users[user_id].setdefault("status_end_time", 0)
+            self.users[user_id].setdefault("status_start_time", 0)
+            self.users[user_id].setdefault("status_duration", 0)
+            self.users[user_id].setdefault("status_reward_multiplier", 0)
+            self.users[user_id].setdefault("last_steal_time", 0)
+            self.users[user_id].setdefault("last_duel_time", 0)
+            self.users[user_id].setdefault("last_breakthrough_time", 0)
+            self.users[user_id].setdefault("breakthrough_bonus", 0)
+            self.users[user_id].setdefault("has_started", False)
+            self.users[user_id].setdefault("daily_streak", 0)
             self._save_data()
         return self.users[user_id]
     
@@ -90,21 +87,12 @@ class XiuXianData:
             self._save_data()
     
     def add_exp(self, user_id: str, exp: int) -> Dict[str, Any]:
-        """增加用户经验，并检查是否升级"""
+        """增加用户修为，但不自动升级，只有通过突破才能升级境界"""
         user = self.get_user(user_id)
         user["exp"] += exp
         
-        # 检查是否升级
+        # 不再自动升级，只返回修为增加信息
         level_up_info = {"leveled_up": False, "old_level": user["level"], "old_realm": user["realm"]}
-        
-        while user["exp"] >= user["max_exp"]:
-            user["exp"] -= user["max_exp"]
-            user["level"] += 1
-            user["max_exp"] = int(user["max_exp"] * 1.5)  # 每级所需经验增加
-            level_up_info["leveled_up"] = True
-            
-            # 更新境界
-            user["realm"] = self._get_realm_by_level(user["level"])
         
         self._save_data()
         return level_up_info
@@ -149,16 +137,7 @@ class XiuXianData:
     
     def _get_realm_by_level(self, level: int) -> str:
         """根据等级获取对应的境界"""
-        if not self.realms_config:
-            # 如果没有加载到配置，使用默认境界
-            return "江湖好手"
-        
-        for realm in self.realms_config:
-            if realm["level"] == level:
-                return realm["name"]
-        
-        # 如果没有找到对应等级的境界，返回默认境界
-        return "江湖好手"
+        return self.config.get_realm_by_level(level)
     
     def add_spirit_stones(self, user_id: str, amount: int) -> int:
         """增加或减少灵石"""
@@ -180,17 +159,18 @@ class XiuXianData:
                 break
         
         # 如果找不到当前境界或已是最高境界，返回None
-        if current_index == -1 or current_index == 0:  # 注意：最高境界的索引是0（因为按等级值从高到低排序）
+        if current_index == -1 or current_index == 55:  # 注意：最高境界的索引是55（因为按等级值从低到高排序）
             return {
                 "has_next": False,
                 "message": "你已达到最高境界，无法继续突破。"
             }
         
-        # 获取下一境界信息
-        next_realm = self.realms_config[current_index - 1]
+        # 获取当前境界和下一境界信息
+        current_realm_info = self.realms_config[current_index]
+        next_realm = self.realms_config[current_index + 1]
         
-        # 计算所需修为
-        exp_required = next_realm["exp_required"]
+        # 计算所需修为（使用当前境界的修为要求）
+        exp_required = current_realm_info["exp_required"]
         current_exp = user["exp"]
         
         # 检查修为是否足够
@@ -199,8 +179,9 @@ class XiuXianData:
         # 检查CD时间
         current_time = int(time.time())
         cd_remaining = 0
-        if current_time - user.get("last_breakthrough_time", 0) < 3600:  # 1小时CD
-            cd_remaining = 3600 - (current_time - user.get("last_breakthrough_time", 0))
+        breakthrough_cooldown = self.config.game_values.get("breakthrough", {}).get("cooldown_seconds", 3600)  # 默认1小时CD
+        if current_time - user.get("last_breakthrough_time", 0) < breakthrough_cooldown:
+            cd_remaining = breakthrough_cooldown - (current_time - user.get("last_breakthrough_time", 0))
         
         return {
             "has_next": True,
@@ -240,11 +221,17 @@ class XiuXianData:
                 "message": f"修为不足，无法突破。当前修为：{next_realm_info['current_exp']}，需要：{next_realm_info['exp_required']}"
             }
         
+        # 从配置中获取突破相关参数
+        breakthrough_config = self.config.game_values.get("breakthrough", {})
+        max_success_rate = breakthrough_config.get("max_success_rate", 0.95)
+        exp_loss_percent_range = breakthrough_config.get("exp_loss_percent_range", [0.01, 0.1])
+        bonus_increase_percent = breakthrough_config.get("bonus_increase_percent", 0.3)
+        
         # 计算突破概率
         base_rate = next_realm_info["breakthrough_rate"]
         # 加上突破加成（如果有）
         bonus_rate = user.get("breakthrough_bonus", 0)
-        final_rate = min(0.95, base_rate + bonus_rate)  # 最高95%成功率
+        final_rate = min(max_success_rate, base_rate + bonus_rate)  # 最高成功率由配置决定
         
         # 决定是否突破成功
         is_success = random.random() < final_rate
@@ -263,31 +250,35 @@ class XiuXianData:
         
         if is_success:
             # 突破成功，更新境界
+            old_realm = user["realm"]
             user["realm"] = next_realm_info["next_realm"]
-            # 消耗修为
+            # 消耗修为（消耗当前境界所需的修为）
             user["exp"] -= next_realm_info["exp_required"]
             # 重置突破加成
             user["breakthrough_bonus"] = 0
+            
+            # 更新最大生命值
+            self.update_max_hp(user_id)
             
             result["message"] = f"恭喜突破成功！你的境界提升为【{user['realm']}】"
         else:
             # 突破失败
             if not use_pill:  # 如果没有使用渡厄丹
-                # 随机扣减1%-10%的修为
-                exp_loss_percent = random.uniform(0.01, 0.1)
+                # 随机扣减修为，范围由配置决定
+                exp_loss_percent = random.uniform(exp_loss_percent_range[0], exp_loss_percent_range[1])
                 exp_loss = int(user["exp"] * exp_loss_percent)
                 user["exp"] = max(0, user["exp"] - exp_loss)
                 
-                # 增加下次突破成功率
-                bonus_increase = base_rate * 0.3  # 当前境界基础突破概率的30%
+                # 增加下次突破成功率，增加比例由配置决定
+                bonus_increase = base_rate * bonus_increase_percent
                 user["breakthrough_bonus"] += bonus_increase
                 
                 result["exp_loss"] = exp_loss
                 result["message"] = f"突破失败！损失了 {exp_loss} 点修为，但下次突破成功率提高了 {bonus_increase*100:.1f}%"
             else:
                 # 使用了渡厄丹，不损失修为
-                # 增加下次突破成功率
-                bonus_increase = base_rate * 0.3  # 当前境界基础突破概率的30%
+                # 增加下次突破成功率，增加比例由配置决定
+                bonus_increase = base_rate * bonus_increase_percent
                 user["breakthrough_bonus"] += bonus_increase
                 
                 result["message"] = f"虽然突破失败，但由于使用了渡厄丹，没有损失修为。下次突破成功率提高了 {bonus_increase*100:.1f}%"
@@ -301,25 +292,69 @@ class XiuXianData:
         """获取所有用户数据"""
         return self.users
     
+    def update_max_hp(self, user_id: str) -> None:
+        """根据用户境界更新最大生命值"""
+        user = self.get_user(user_id)
+        realm = user["realm"]
+        
+        # 从配置中获取该境界对应的最大生命值
+        max_hp = self.config.health_limits.get(realm, 100)  # 默认100
+        
+        # 更新用户最大生命值
+        old_max_hp = user["stats"]["max_hp"]
+        user["stats"]["max_hp"] = max_hp
+        
+        # 如果最大生命值增加，当前生命值也相应增加
+        if max_hp > old_max_hp:
+            hp_increase = max_hp - old_max_hp
+            user["stats"]["hp"] += hp_increase
+        
+        # 确保当前生命值不超过最大生命值
+        user["stats"]["hp"] = min(user["stats"]["hp"], user["stats"]["max_hp"])
+        
+        # 更新用户数据
+        self.update_user(user_id, user)
+    
     def duel(self, user_id: str, target_id: str) -> Dict[str, Any]:
         """切磋功能"""
         user = self.get_user(user_id)
         target = self.get_user(target_id)
         
+        # 从配置中获取战斗公式参数
+        duel_config = self.config.combat_formulas.get("duel", {})
+        power_calc = duel_config.get("power_calculation", {})
+        win_chance_config = duel_config.get("win_chance", {})
+        
+        # 获取战力计算参数
+        level_multiplier = power_calc.get("level_multiplier", 10)
+        attack_weight = power_calc.get("attack_weight", 1)
+        defense_weight = power_calc.get("defense_weight", 1)
+        
         # 计算战力（基于等级、装备和功法）
-        user_power = user["level"] * 10 + user["stats"]["attack"] + user["stats"]["defense"]
-        target_power = target["level"] * 10 + target["stats"]["attack"] + target["stats"]["defense"]
+        user_power = user["level"] * level_multiplier + user["stats"]["attack"] * attack_weight + user["stats"]["defense"] * defense_weight
+        target_power = target["level"] * level_multiplier + target["stats"]["attack"] * attack_weight + target["stats"]["defense"] * defense_weight
+        
+        # 获取胜率计算参数
+        base_chance = win_chance_config.get("base_chance", 0.5)
+        power_diff_weight = win_chance_config.get("power_diff_weight", 0.3)
+        min_chance = win_chance_config.get("min_chance", 0.1)
+        max_chance = win_chance_config.get("max_chance", 0.9)
         
         # 计算胜率（战力差距影响）
         power_diff = abs(user_power - target_power)
-        win_chance = 0.5 + (user_power - target_power) / max(user_power, target_power) * 0.3
-        win_chance = max(0.1, min(0.9, win_chance))  # 限制在10%-90%之间
+        win_chance = base_chance + (user_power - target_power) / max(user_power, target_power) * power_diff_weight
+        win_chance = max(min_chance, min(max_chance, win_chance))  # 限制在配置的范围内
         
         # 决定胜负
         is_winner = random.random() < win_chance
         
+        # 从配置中获取修为奖励范围
+        duel_exp_config = self.config.game_values.get("duel", {})
+        exp_range = duel_exp_config.get("exp_range", [10, 30])
+        loser_exp_divisor = duel_exp_config.get("loser_exp_divisor", 2)
+        
         # 计算奖惩
-        exp_change = random.randint(10, 30) * max(user["level"], target["level"])
+        exp_change = random.randint(exp_range[0], exp_range[1]) * max(user["level"], target["level"])
         
         result = {
             "success": True,
@@ -329,12 +364,12 @@ class XiuXianData:
         }
         
         if is_winner:
-            # 胜者获得经验，败者损失经验
+            # 胜者获得修为，败者损失修为
             self.add_exp(user_id, exp_change)
             target["exp"] = max(0, target["exp"] - exp_change // 2)
             result["message"] = f"切磋胜利！获得修为 {exp_change} 点！"
         else:
-            # 败者损失经验，胜者获得经验
+            # 败者损失修为，胜者获得修为
             user["exp"] = max(0, user["exp"] - exp_change // 2)
             self.add_exp(target_id, exp_change)
             result["message"] = f"切磋失败！损失修为 {exp_change // 2} 点！"
@@ -397,8 +432,13 @@ class XiuXianData:
         """进行秘境探索，获取奖励"""
         user = self.get_user(user_id)
         current_time = int(time.time())
-        # 随机1-2小时的冷却时间
-        cooldown = 60 * 60 * random.randint(1, 2)  # 1-2小时冷却时间
+        
+        # 从配置中获取秘境探索相关参数
+        adventure_config = self.config.game_values.get("adventure", {})
+        cooldown_hours = adventure_config.get("cooldown_hours", [1, 2])  # 默认1-2小时冷却
+        
+        # 随机冷却时间
+        cooldown = 60 * 60 * random.randint(cooldown_hours[0], cooldown_hours[1])
         
         # 检查冷却时间
         if current_time - user["last_adventure_time"] < cooldown:
@@ -412,8 +452,12 @@ class XiuXianData:
         
         # 根据用户等级确定探索难度和奖励
         level = user["level"]
-        # 随机事件类型：宝物、灵草、妖兽、机缘
-        event_types = ["treasure", "herb", "monster", "opportunity"]
+        
+        # 从配置中获取事件配置
+        adventure_events = self.config.adventure_events
+        
+        # 获取事件类型列表
+        event_types = adventure_events.get("event_types", ["treasure", "herb", "monster", "opportunity"])
         event_type = random.choice(event_types)
         
         result = {
@@ -425,26 +469,33 @@ class XiuXianData:
             "message": ""
         }
         
+        # 获取惩罚事件配置
+        punishment_config = adventure_events.get("punishment", {})
+        punishment_chance = punishment_config.get("chance", 0.1)  # 默认10%概率触发惩罚
+        punishment_events = punishment_config.get("events", ["遭遇强敌袭击", "踩入陷阱", "中了毒雾"])
+        
+        # 获取惩罚损失范围
+        spirit_stones_loss_range = punishment_config.get("spirit_stones_loss", {})
+        min_stones_multiplier = spirit_stones_loss_range.get("min_multiplier", 5)
+        max_stones_multiplier = spirit_stones_loss_range.get("max_multiplier", 15)
+        
+        exp_loss_range = punishment_config.get("exp_loss", {})
+        min_exp_multiplier = exp_loss_range.get("min_multiplier", 2)
+        max_exp_multiplier = exp_loss_range.get("max_multiplier", 5)
+        
         # 随机决定是否触发惩罚事件
-        is_punishment = random.random() < 0.1  # 10%概率触发惩罚
+        is_punishment = random.random() < punishment_chance
         
         # 如果触发惩罚事件
         if is_punishment:
-            punishments = [
-                "遭遇强敌袭击",
-                "踩入陷阱",
-                "中了毒雾",
-                "触发阵法反噬",
-                "引来天劫"
-            ]
-            punishment = random.choice(punishments)
+            punishment = random.choice(punishment_events)
             
             # 损失灵石
-            lost_stones = min(user["spirit_stones"], random.randint(level * 5, level * 15))
+            lost_stones = min(user["spirit_stones"], random.randint(level * min_stones_multiplier, level * max_stones_multiplier))
             user["spirit_stones"] -= lost_stones
             
-            # 可能损失一些经验
-            exp_loss = random.randint(level * 2, level * 5)
+            # 可能损失一些修为
+            exp_loss = random.randint(level * min_exp_multiplier, level * max_exp_multiplier)
             user["exp"] = max(0, user["exp"] - exp_loss)
             
             result["message"] = f"你在秘境中{punishment}，损失了 {lost_stones} 灵石和 {exp_loss} 点修为！"
@@ -459,24 +510,37 @@ class XiuXianData:
             
         # 根据事件类型生成结果
         if event_type == "treasure":
+            # 获取宝物配置
+            treasure_config = adventure_events.get("treasure", {})
+            spirit_stones_gain = treasure_config.get("spirit_stones_gain", {})
+            min_multiplier = spirit_stones_gain.get("min_multiplier", 10)
+            max_multiplier = spirit_stones_gain.get("max_multiplier", 30)
+            treasure_messages = treasure_config.get("messages", ["你在秘境中发现了一处宝藏，获得了 {spirit_stones} 灵石！"])
+            
             # 发现宝物
-            spirit_stones = random.randint(level * 10, level * 30)
+            spirit_stones = random.randint(level * min_multiplier, level * max_multiplier)
             result["spirit_stones_gain"] = spirit_stones
             user["spirit_stones"] += spirit_stones
-            result["message"] = f"你在秘境中发现了一处宝藏，获得了 {spirit_stones} 灵石！"
+            result["message"] = random.choice(treasure_messages).format(spirit_stones=spirit_stones)
             
         elif event_type == "herb":
+            # 获取草药配置
+            herb_config = adventure_events.get("herb", {})
+            herbs = herb_config.get("items", ["灵草", "灵芝", "仙参", "龙血草", "九转还魂草"])
+            herb_messages = herb_config.get("messages", ["你在秘境中发现了珍贵的 {herb}！"])
+            
             # 发现灵草
-            herbs = ["灵草", "灵芝", "仙参", "龙血草", "九转还魂草"]
             herb = random.choice(herbs)
             user["items"].append(herb)
             result["rewards"].append(herb)
-            result["message"] = f"你在秘境中发现了珍贵的 {herb}！"
+            result["message"] = random.choice(herb_messages).format(herb=herb)
             
         elif event_type == "monster":
-            # 遇到妖兽
-            monster_names = ["山猪", "赤焰狐", "黑风狼", "幽冥蛇", "雷霆鹰"]
-            monster = random.choice(monster_names)
+            # 获取怪物配置
+            monster_config = adventure_events.get("monster", {})
+            monster_names = monster_config.get("names", ["山猪", "赤焰狐", "黑风狼", "幽冥蛇", "雷霆鹰"])
+            win_messages = monster_config.get("win_messages", ["你在秘境中遇到了 {monster}，经过一番激战，你成功击败了它！\n获得了 {exp_gain} 点修为和 {spirit_stones} 灵石！"])
+            lose_messages = monster_config.get("lose_messages", ["你在秘境中遇到了 {monster}，不敌其强大的实力，被迫撤退...\n下次再来挑战吧！"])
             
             # 简单战斗逻辑
             monster_level = random.randint(max(1, level - 5), level + 5)
@@ -495,28 +559,40 @@ class XiuXianData:
                 user = self.get_user(user_id)  # 重新获取用户数据，因为可能升级
                 user["spirit_stones"] += spirit_stones
                 
-                result["message"] = f"你在秘境中遇到了 {monster}，经过一番激战，你成功击败了它！\n获得了 {exp_gain} 点修为和 {spirit_stones} 灵石！"
+                result["message"] = random.choice(win_messages).format(monster=monster, exp_gain=exp_gain, spirit_stones=spirit_stones)
             else:
                 # 战斗失败
-                result["message"] = f"你在秘境中遇到了 {monster}，不敌其强大的实力，被迫撤退...\n下次再来挑战吧！"
+                result["message"] = random.choice(lose_messages).format(monster=monster)
         
         elif event_type == "opportunity":
-            # 机缘
-            opportunities = [
+            # 获取机缘配置
+            opportunity_config = adventure_events.get("opportunity", {})
+            opportunities = opportunity_config.get("events", [
                 "发现了一处修炼宝地",
                 "偶遇前辈指点",
                 "得到一篇功法残卷",
                 "悟道树下顿悟",
                 "天降灵雨洗礼"
-            ]
+            ])
+            
+            # 获取修为增益配置
+            exp_gain_config = opportunity_config.get("exp_gain", {})
+            min_multiplier = exp_gain_config.get("min_multiplier", 10)
+            max_multiplier = exp_gain_config.get("max_multiplier", 20)
+            
+            # 获取功法概率和消息配置
+            technique_chance = opportunity_config.get("technique_chance", 0.2)
+            messages = opportunity_config.get("messages", ["你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为！"])
+            technique_messages = opportunity_config.get("technique_messages", ["你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为，并习得了 {technique}！"])
+            
             opportunity = random.choice(opportunities)
             
-            exp_gain = level * random.randint(10, 20)
+            exp_gain = level * random.randint(min_multiplier, max_multiplier)
             result["exp_gain"] = exp_gain
             self.add_exp(user_id, exp_gain)
             
             # 有小概率获得功法
-            if random.random() < 0.2:
+            if random.random() < technique_chance:
                 techniques = ["吐纳术", "御风术", "小周天功", "金刚不坏", "五行遁法", "太极剑法"]
                 available_techniques = [t for t in techniques if t not in user["techniques"]]
                 
@@ -524,11 +600,11 @@ class XiuXianData:
                     new_technique = random.choice(available_techniques)
                     user["techniques"].append(new_technique)
                     result["rewards"].append(new_technique)
-                    result["message"] = f"你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为，并习得了 {new_technique}！"
+                    result["message"] = random.choice(technique_messages).format(opportunity=opportunity, exp_gain=exp_gain, technique=new_technique)
                 else:
-                    result["message"] = f"你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为！"
+                    result["message"] = random.choice(messages).format(opportunity=opportunity, exp_gain=exp_gain)
             else:
-                result["message"] = f"你在秘境中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为！"
+                result["message"] = random.choice(messages).format(opportunity=opportunity, exp_gain=exp_gain)
         
         # 更新最后探险时间
         user["last_adventure_time"] = current_time
@@ -548,18 +624,8 @@ class XiuXianData:
                 "message": f"你已经学会了 {technique_name}，不需要重复学习。"
             }
         
-        # 功法列表及其所需灵石和等级
-        techniques = {
-            "吐纳术": {"level": 1, "cost": 100},
-            "御风术": {"level": 5, "cost": 300},
-            "小周天功": {"level": 10, "cost": 800},
-            "金刚不坏": {"level": 15, "cost": 1500},
-            "五行遁法": {"level": 20, "cost": 3000},
-            "太极剑法": {"level": 25, "cost": 5000},
-            "大周天功": {"level": 30, "cost": 8000},
-            "九阳神功": {"level": 40, "cost": 15000},
-            "乾坤大挪移": {"level": 50, "cost": 30000}
-        }
+        # 从配置中获取功法列表
+        techniques = self.config.shop_items.get("techniques", {})
         
         # 检查功法是否存在
         if technique_name not in techniques:
@@ -598,18 +664,8 @@ class XiuXianData:
         """获取用户可学习的功法列表"""
         user = self.get_user(user_id)
         
-        # 功法列表及其所需灵石和等级
-        all_techniques = {
-            "吐纳术": {"level": 1, "cost": 100, "description": "基础呼吸法，提升修炼速度"},
-            "御风术": {"level": 5, "cost": 300, "description": "掌控风元素，提升移动速度"},
-            "小周天功": {"level": 10, "cost": 800, "description": "打通周身经脉，增强修炼效率"},
-            "金刚不坏": {"level": 15, "cost": 1500, "description": "强化体魄，提高防御力"},
-            "五行遁法": {"level": 20, "cost": 3000, "description": "掌握五行之力，提高闪避能力"},
-            "太极剑法": {"level": 25, "cost": 5000, "description": "刚柔并济的剑法，提高攻击力"},
-            "大周天功": {"level": 30, "cost": 8000, "description": "贯通全身经脉，大幅提升修炼效率"},
-            "九阳神功": {"level": 40, "cost": 15000, "description": "至阳至刚的功法，全面提升各项属性"},
-            "乾坤大挪移": {"level": 50, "cost": 30000, "description": "移星换斗的神功，可借力打力"}
-        }
+        # 从配置中获取功法列表
+        all_techniques = self.config.shop_items.get("techniques", {})
         
         result = []
         for name, info in all_techniques.items():
@@ -638,14 +694,8 @@ class XiuXianData:
         """获取用户可购买的丹药列表"""
         user = self.get_user(user_id)
         
-        # 丹药列表及其所需灵石和等级
-        all_pills = {
-            "渡厄丹": {"level": 5, "cost": 200, "description": "服用后可恢复少量修为，突破瓶颈", "effect": {"exp": 50}},
-            "聚气丹": {"level": 15, "cost": 500, "description": "服用后可恢复中量修为，提升修炼速度", "effect": {"exp": 150}},
-            "回春丹": {"level": 25, "cost": 1000, "description": "服用后可恢复大量修为，延年益寿", "effect": {"exp": 300}},
-            "洗髓丹": {"level": 35, "cost": 2000, "description": "服用后可洗髓伐毛，重塑根基", "effect": {"exp": 500}},
-            "金元丹": {"level": 45, "cost": 5000, "description": "服用后可大幅提升修为，改善体质", "effect": {"exp": 1000}}
-        }
+        # 从配置中获取丹药列表
+        all_pills = self.config.shop_items.get("pills", {})
         
         result = []
         for name, info in all_pills.items():
@@ -673,14 +723,8 @@ class XiuXianData:
         """购买丹药"""
         user = self.get_user(user_id)
         
-        # 丹药列表及其所需灵石和等级
-        all_pills = {
-            "渡厄丹": {"level": 5, "cost": 200, "description": "服用后可恢复少量修为，突破瓶颈", "effect": {"exp": 50}},
-            "聚气丹": {"level": 15, "cost": 500, "description": "服用后可恢复中量修为，提升修炼速度", "effect": {"exp": 150}},
-            "回春丹": {"level": 25, "cost": 1000, "description": "服用后可恢复大量修为，延年益寿", "effect": {"exp": 300}},
-            "洗髓丹": {"level": 35, "cost": 2000, "description": "服用后可洗髓伐毛，重塑根基", "effect": {"exp": 500}},
-            "金元丹": {"level": 45, "cost": 5000, "description": "服用后可大幅提升修为，改善体质", "effect": {"exp": 1000}}
-        }
+        # 从配置中获取丹药列表
+        all_pills = self.config.shop_items.get("pills", {})
         
         # 检查丹药是否存在
         if pill_name not in all_pills:
@@ -728,14 +772,8 @@ class XiuXianData:
         """使用丹药"""
         user = self.get_user(user_id)
         
-        # 丹药列表及其效果
-        all_pills = {
-            "渡厄丹": {"level": 5, "cost": 200, "description": "服用后可恢复少量修为，突破瓶颈", "effect": {"exp": 50}, "breakthrough_bonus": 0.1},
-            "聚气丹": {"level": 15, "cost": 500, "description": "服用后可恢复中量修为，提升修炼速度", "effect": {"exp": 150}},
-            "回春丹": {"level": 25, "cost": 1000, "description": "服用后可恢复大量修为，延年益寿", "effect": {"exp": 300}},
-            "洗髓丹": {"level": 35, "cost": 2000, "description": "服用后可洗髓伐毛，重塑根基", "effect": {"exp": 500}},
-            "金元丹": {"level": 45, "cost": 5000, "description": "服用后可大幅提升修为，改善体质", "effect": {"exp": 1000}}
-        }
+        # 从配置中获取丹药列表
+        all_pills = self.config.shop_items.get("pills", {})
         
         # 检查丹药是否存在
         if pill_name not in all_pills:
@@ -766,7 +804,7 @@ class XiuXianData:
             user["breakthrough_bonus"] = pill["breakthrough_bonus"]
             message += f"\n丹药效果：下次突破成功率提升 {int(pill['breakthrough_bonus'] * 100)}%。"
         
-        # 增加经验并检查是否升级
+        # 增加修为并检查是否升级
         level_up_info = self.add_exp(user_id, exp_gain)
         
         # 更新用户数据
@@ -786,8 +824,40 @@ class XiuXianData:
         """挖矿获取灵石"""
         user = self.get_user(user_id)
         current_time = int(time.time())
-        # 随机1-2小时的冷却时间
-        cooldown = 60 * 60 * random.randint(1, 2)  # 1-2小时冷却时间
+        
+        # 从配置中获取挖矿相关参数
+        mining_config = self.config.game_values.get("mining", {})
+        cooldown_hours = mining_config.get("cooldown_hours", [1, 2])  # 默认1-2小时冷却
+        
+        # 从配置中获取挖矿事件配置
+        mining_events = self.config.mining_events
+        
+        # 获取惩罚事件配置
+        punishment_config = mining_events.get("punishment", {})
+        punishment_chance = punishment_config.get("chance", 0.1)  # 默认10%惩罚概率
+        punishment_events = punishment_config.get("events", ["矿洞坍塌", "遭遇矿妖袭击"])
+        punishment_loss_range = punishment_config.get("spirit_stones_loss", {})
+        min_loss_multiplier = punishment_loss_range.get("min_multiplier", 3)
+        max_loss_multiplier = punishment_loss_range.get("max_multiplier", 10)
+        
+        # 获取成功事件配置
+        success_config = mining_events.get("success", {})
+        base_stones = success_config.get("base_stones", 10)  # 默认基础灵石
+        level_multiplier = success_config.get("level_bonus_multiplier", 2)  # 默认等级倍率
+        random_range = success_config.get("random_range", [-5, 10])  # 默认随机范围
+        min_stones = success_config.get("min_stones", 5)  # 默认最小灵石
+        
+        # 获取暴击配置
+        critical_config = success_config.get("critical", {})
+        critical_chance = critical_config.get("chance", 0.1)  # 默认暴击率
+        critical_multiplier = critical_config.get("multiplier", 3)  # 默认暴击倍率
+        
+        # 获取消息配置
+        success_messages = success_config.get("messages", ["你辛勤地挖掘矿石，获得了 {stones} 灵石。"])
+        critical_messages = success_config.get("critical_messages", ["运气爆棚！你在矿洞中发现了一条灵石矿脉，获得了 {stones} 灵石！"])
+        
+        # 随机冷却时间
+        cooldown = 60 * 60 * random.randint(cooldown_hours[0], cooldown_hours[1])
         
         # 检查冷却时间
         if current_time - user["last_mine_time"] < cooldown:
@@ -800,20 +870,13 @@ class XiuXianData:
             }
         
         # 随机决定是否触发惩罚事件
-        is_punishment = random.random() < 0.1  # 10%概率触发惩罚
+        is_punishment = random.random() < punishment_chance
         
         if is_punishment:
-            punishments = [
-                "矿洞坍塌",
-                "遭遇矿妖袭击",
-                "触发禁制陷阱",
-                "灵石爆炸",
-                "挖到诅咒石"
-            ]
-            punishment = random.choice(punishments)
+            punishment = random.choice(punishment_events)
             
             # 损失灵石
-            lost_stones = min(user["spirit_stones"], random.randint(user["level"] * 3, user["level"] * 10))
+            lost_stones = min(user["spirit_stones"], random.randint(user["level"] * min_loss_multiplier, user["level"] * max_loss_multiplier))
             user["spirit_stones"] -= lost_stones
             
             # 更新用户数据
@@ -828,20 +891,19 @@ class XiuXianData:
             }
         
         # 根据等级确定基础挖矿收益
-        base_stones = 10
-        level_bonus = user["level"] * 2
+        level_bonus = user["level"] * level_multiplier
         
         # 随机波动
-        stones = base_stones + level_bonus + random.randint(-5, 10)
-        stones = max(5, stones)  # 至少获得5灵石
+        stones = base_stones + level_bonus + random.randint(random_range[0], random_range[1])
+        stones = max(min_stones, stones)  # 至少获得最小灵石数
         
         # 小概率暴击
-        critical = random.random() < 0.1
+        critical = random.random() < critical_chance
         if critical:
-            stones = stones * 3
-            message = f"运气爆棚！你在矿洞中发现了一条灵石矿脉，获得了 {stones} 灵石！"
+            stones = stones * critical_multiplier
+            message = random.choice(critical_messages).format(stones=stones)
         else:
-            message = f"你辛勤地挖掘矿石，获得了 {stones} 灵石。"
+            message = random.choice(success_messages).format(stones=stones)
         
         # 更新用户数据
         user["spirit_stones"] += stones
@@ -885,13 +947,19 @@ class XiuXianData:
             # 断签，重置连续签到
             user["daily_streak"] = 1
         
+        # 从配置中获取每日签到奖励参数
+        daily_sign_config = self.config.game_values.get("daily_sign", {})
+        base_stones = daily_sign_config.get("base_stones", 50)
+        streak_bonus_per_day = daily_sign_config.get("streak_bonus_per_day", 10)
+        max_streak_bonus = daily_sign_config.get("max_streak_bonus", 100)
+        exp_multiplier = daily_sign_config.get("exp_multiplier", 5)
+        
         # 根据连续签到天数给予奖励
         streak = user["daily_streak"]
-        base_stones = 50
-        streak_bonus = min(streak * 10, 100)  # 最多额外奖励100灵石
+        streak_bonus = min(streak * streak_bonus_per_day, max_streak_bonus)  # 最多额外奖励由配置决定
         
         stones = base_stones + streak_bonus
-        exp = user["level"] * 5  # 经验奖励与等级相关
+        exp = user["level"] * exp_multiplier  # 修为奖励与等级相关，倍率由配置决定
         
         # 更新用户数据
         user["spirit_stones"] += stones
@@ -908,38 +976,10 @@ class XiuXianData:
         }
     
     # ===== 装备系统 =====
-    # 该函数为静态方法，不需要实例化即可调用
-    @staticmethod
-    def get_equipment_list() -> Dict[str, List[Dict[str, Any]]]:
+    def get_equipment_list(self) -> Dict[str, List[Dict[str, Any]]]:
         """获取所有可用装备列表"""
-        equipment = {
-            "weapon": [
-                {"id": "w1", "name": "木剑", "level": 1, "cost": 200, "attack": 5, "description": "普通的木制剑，适合初学者使用"},
-                {"id": "w2", "name": "铁剑", "level": 5, "cost": 500, "attack": 15, "description": "坚固的铁剑，具有不错的攻击力"},
-                {"id": "w3", "name": "青锋剑", "level": 10, "cost": 1200, "attack": 30, "description": "锋利的精钢宝剑，削铁如泥"},
-                {"id": "w4", "name": "赤焰剑", "level": 20, "cost": 3000, "attack": 60, "description": "蕴含火属性的法剑，可灼烧敌人"},
-                {"id": "w5", "name": "紫电神剑", "level": 30, "cost": 8000, "attack": 100, "description": "雷属性神兵，攻击带有麻痹效果"},
-                {"id": "w6", "name": "太虚剑", "level": 50, "cost": 20000, "attack": 200, "description": "传说中的仙家宝剑，锋利无比"}
-            ],
-            "armor": [
-                {"id": "a1", "name": "布衣", "level": 1, "cost": 200, "defense": 5, "description": "普通的布制衣服，提供基础防护"},
-                {"id": "a2", "name": "皮甲", "level": 5, "cost": 500, "defense": 15, "description": "用兽皮制成的护甲，提供较好的防护"},
-                {"id": "a3", "name": "铁甲", "level": 10, "cost": 1200, "defense": 30, "description": "坚固的铁制护甲，大幅提升防御力"},
-                {"id": "a4", "name": "玄冰甲", "level": 20, "cost": 3000, "defense": 60, "description": "蕴含冰属性的法甲，可抵御火属性攻击"},
-                {"id": "a5", "name": "金刚甲", "level": 30, "cost": 8000, "defense": 100, "description": "坚不可摧的护甲，大幅提升生存能力"},
-                {"id": "a6", "name": "仙云法衣", "level": 50, "cost": 20000, "defense": 200, "description": "仙家法衣，轻若无物却防御惊人"}
-            ],
-            "accessory": [
-                {"id": "ac1", "name": "木质护符", "level": 1, "cost": 200, "hp": 20, "description": "简单的护身符，略微增加生命值"},
-                {"id": "ac2", "name": "玉佩", "level": 5, "cost": 500, "hp": 50, "description": "蕴含灵气的玉佩，提升生命值"},
-                {"id": "ac3", "name": "灵珠", "level": 10, "cost": 1200, "hp": 100, "description": "凝聚灵气的宝珠，大幅提升生命值"},
-                {"id": "ac4", "name": "聚灵环", "level": 20, "cost": 3000, "hp": 200, "description": "聚集周围灵气的法器，显著提升生命值"},
-                {"id": "ac5", "name": "龙血石", "level": 30, "cost": 8000, "hp": 400, "description": "蕴含龙族精血的宝石，极大提升生命力"},
-                {"id": "ac6", "name": "仙灵珠", "level": 50, "cost": 20000, "hp": 800, "description": "仙界宝物，拥有强大的生命力"}
-            ]
-        }
-        
-        return equipment
+        # 从配置中获取装备列表
+        return self.config.shop_items.get("equipment", {})
     
     def get_user_equipment(self, user_id: str) -> Dict[str, Any]:
         """获取用户当前装备信息"""
@@ -1065,7 +1105,7 @@ class XiuXianData:
         Args:
             user_id: 用户ID
             status_type: 状态类型，可选值：'修炼中'、'探索中'、'收集灵石中'
-            duration_hours: 持续时间（小时），可以是小数表示小时和分钟，范围0.1-6小时
+            duration_hours: 持续时间（小时），可以是小数表示小时和分钟
             
         Returns:
             包含状态信息的字典
@@ -1076,15 +1116,27 @@ class XiuXianData:
         # 检查是否已有状态
         if user["status"] is not None and current_time < user["status_end_time"]:
             remaining = user["status_end_time"] - current_time
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
+            # 使用工具类格式化剩余时间
+            time_str = XiuXianUtils.format_time_remaining(remaining)
             return {
                 "success": False,
-                "message": f"你当前正处于{user['status']}状态，还需 {hours}小时{minutes}分钟 结束"
+                "message": f"你当前正处于{user['status']}状态，还需 {time_str} 结束"
             }
         
-        # 限制持续时间在0.1-6小时之间
-        # duration_hours = max(0.1, min(6, duration_hours))
+        # 根据状态类型获取对应的活动类型配置
+        activity_type = "practice" if status_type == "修炼中" else "adventure" if status_type == "探索中" else "mining" if status_type == "收集灵石中" else "status"
+        
+        # 从配置中获取最小和最大持续时间限制
+        # 优先使用活动类型自己的min_duration_hours配置
+        if activity_type in self.config.game_values and "min_duration_hours" in self.config.game_values[activity_type]:
+            min_duration = self.config.game_values[activity_type]["min_duration_hours"]
+        else:
+            min_duration = self.config.get_min_duration_hours()
+        
+        max_duration = self.config.get_max_duration_hours(activity_type)
+        
+        # 限制持续时间在配置的范围内
+        duration_hours = max(min_duration, min(max_duration, duration_hours))
         duration_seconds = int(duration_hours * 3600)
         
         # 计算奖励倍数（时间越长，奖励越多）
@@ -1114,24 +1166,34 @@ class XiuXianData:
         user = self.get_user(user_id)
         current_time = int(time.time())
         
-        # 如果没有状态或状态已结束
-        if user["status"] is None or current_time >= user["status_end_time"]:
+        # 如果没有状态
+        if user["status"] is None:
             return {
                 "has_status": False,
                 "message": "你当前没有进行中的状态"
             }
+            
+        # 如果状态已结束，自动完成状态并返回无状态
+        if current_time >= user["status_end_time"]:
+            # 记录日志但不处理奖励，让complete_status处理
+            logger.info(f"用户 ({user_id}) 的{user['status']}状态已结束，等待领取奖励")
+            return {
+                "has_status": False,
+                "status_completed": True,
+                "message": f"你的{user['status']}已经结束，可以领取奖励了"
+            }
         
         # 计算剩余时间
         remaining = user["status_end_time"] - current_time
-        hours = remaining // 3600
-        minutes = (remaining % 3600) // 60
-        seconds = remaining % 60
+        
+        # 使用工具类格式化剩余时间
+        time_str = XiuXianUtils.format_time_remaining(remaining)
         
         return {
             "has_status": True,
             "status": user["status"],
             "remaining": remaining,
-            "message": f"你当前正处于{user['status']}状态，还需 {hours}小时{minutes}分钟{seconds}秒 结束"
+            "message": f"你当前正处于{user['status']}状态，还需 {time_str} 结束"
         }
     
     def complete_status(self, user_id: str) -> Dict[str, Any]:
@@ -1150,11 +1212,11 @@ class XiuXianData:
         if current_time < user["status_end_time"]:
             logger.info(f"current_time: {current_time}, user['status_end_time']: {user['status_end_time']}")
             remaining = user["status_end_time"] - current_time
-            hours = remaining // 3600
-            minutes = (remaining % 3600) // 60
+            # 使用工具类格式化剩余时间
+            time_str = XiuXianUtils.format_time_remaining(remaining)
             return {
                 "success": False,
-                "message": f"你的{user['status']}尚未完成，还需 {hours}小时{minutes}分钟"
+                "message": f"你的{user['status']}尚未完成，还需 {time_str}"
             }
         
         status_type = user["status"]
@@ -1167,9 +1229,30 @@ class XiuXianData:
         
         # 根据不同状态类型给予不同奖励
         if status_type == "修炼中":
-            # 修炼获得经验
-            base_exp = 10 * multiplier
-            exp_gain = int(base_exp * (1 + random.random() * 0.5))  # 随机波动
+            # 从配置中获取修炼相关参数
+            practice_config = self.config.game_values.get("practice", {})
+            base_exp_per_hour = practice_config.get("base_exp_per_hour", 10)
+            level_multiplier = practice_config.get("level_multiplier", 2)
+            random_bonus_range = practice_config.get("random_bonus_range", [-5, 10])
+            critical_chance = practice_config.get("critical_chance", 0.1)
+            critical_multiplier = practice_config.get("critical_multiplier", 3)
+            
+            # 使用工具类计算奖励
+            reward_result = XiuXianUtils.calculate_reward(
+                base_value=base_exp_per_hour,
+                level=user["level"],
+                multiplier=multiplier,
+                level_factor=level_multiplier,
+                random_range=random_bonus_range,
+                critical_chance=critical_chance,
+                critical_multiplier=critical_multiplier,
+                min_value=5
+            )
+            
+            exp_gain = reward_result["value"]
+            is_critical = reward_result["is_critical"]
+            if is_critical:
+                result["is_critical"] = True
             
             level_up_info = self.add_exp(user_id, exp_gain)
             user = self.get_user(user_id)  # 重新获取更新后的数据
@@ -1180,28 +1263,45 @@ class XiuXianData:
             if level_up_info["leveled_up"]:
                 result["message"] = f"闭关修炼结束，获得 {exp_gain} 点修为！\n境界提升：{level_up_info['old_realm']} → {user['realm']}\n等级提升：{level_up_info['old_level']} → {user['level']}"
             else:
-                result["message"] = f"闭关修炼结束，获得 {exp_gain} 点修为！"
+                if is_critical:
+                    result["message"] = f"闭关修炼结束，顿悟成功！获得 {exp_gain} 点修为！"
+                else:
+                    result["message"] = f"闭关修炼结束，获得 {exp_gain} 点修为！"
         
         elif status_type == "探索中":
-            # 秘境探索获得奖励，有几率获得灵石、经验或物品，也有几率受到惩罚
-            is_punishment = random.random() < 0.1  # 10%概率触发惩罚
+            # 从配置中获取秘境探索相关参数
+            adventure_config = self.config.game_values.get("adventure", {})
+            adventure_events = self.config.adventure_events
+            
+            # 获取事件类型列表
+            event_types = adventure_events.get("event_types", ["treasure", "herb", "monster", "opportunity"])
+            
+            # 获取惩罚事件配置
+            punishment_config = adventure_events.get("punishment", {})
+            punishment_chance = punishment_config.get("chance", 0.1)  # 默认10%概率触发惩罚
+            punishment_events = punishment_config.get("events", ["遭遇强敌袭击", "踩入陷阱", "中了毒雾"])
+            
+            # 获取惩罚损失范围
+            spirit_stones_loss_range = punishment_config.get("spirit_stones_loss", {})
+            min_stones_multiplier = spirit_stones_loss_range.get("min_multiplier", 5)
+            max_stones_multiplier = spirit_stones_loss_range.get("max_multiplier", 15)
+            
+            exp_loss_range = punishment_config.get("exp_loss", {})
+            min_exp_multiplier = exp_loss_range.get("min_multiplier", 2)
+            max_exp_multiplier = exp_loss_range.get("max_multiplier", 5)
+            
+            # 随机决定是否触发惩罚事件
+            is_punishment = random.random() < punishment_chance
             
             if is_punishment:
-                punishments = [
-                    "遭遇强敌袭击",
-                    "踩入陷阱",
-                    "中了毒雾",
-                    "触发阵法反噬",
-                    "引来天劫"
-                ]
-                punishment = random.choice(punishments)
+                punishment = random.choice(punishment_events)
                 
                 # 损失灵石
-                lost_stones = min(user["spirit_stones"], random.randint(user["level"] * 5, user["level"] * 15))
+                lost_stones = min(user["spirit_stones"], random.randint(user["level"] * min_stones_multiplier, user["level"] * max_stones_multiplier))
                 user["spirit_stones"] -= lost_stones
                 
-                # 可能损失一些经验
-                exp_loss = random.randint(user["level"] * 2, user["level"] * 5)
+                # 可能损失一些修为
+                exp_loss = random.randint(user["level"] * min_exp_multiplier, user["level"] * max_exp_multiplier)
                 user["exp"] = max(0, user["exp"] - exp_loss)
                 
                 result["is_punishment"] = True
@@ -1209,20 +1309,30 @@ class XiuXianData:
                 result["exp_loss"] = exp_loss
                 result["message"] = f"长时间的秘境探索中{punishment}，损失了 {lost_stones} 灵石和 {exp_loss} 点修为！"
             else:
-                # 随机事件类型：宝物、灵草、妖兽、机缘
-                event_types = ["treasure", "herb", "monster", "opportunity"]
+                # 随机事件类型
                 event_type = random.choice(event_types)
                 
                 if event_type == "treasure":
+                    # 获取宝物配置
+                    treasure_config = adventure_events.get("treasure", {})
+                    spirit_stones_gain = treasure_config.get("spirit_stones_gain", {})
+                    min_multiplier = spirit_stones_gain.get("min_multiplier", 10)
+                    max_multiplier = spirit_stones_gain.get("max_multiplier", 30)
+                    treasure_messages = treasure_config.get("messages", ["你在秘境中发现了一处宝藏，获得了 {spirit_stones} 灵石！"])
+                    
                     # 发现宝物
-                    spirit_stones = random.randint(user["level"] * 10, user["level"] * 30) * multiplier
+                    spirit_stones = random.randint(user["level"] * min_multiplier, user["level"] * max_multiplier) * multiplier
                     user["spirit_stones"] += spirit_stones
                     result["spirit_stones_gain"] = spirit_stones
-                    result["message"] = f"长时间的秘境探索中发现了一处宝藏，获得了 {spirit_stones} 灵石！"
+                    result["message"] = random.choice(treasure_messages).format(spirit_stones=spirit_stones)
                 
                 elif event_type == "herb":
+                    # 获取草药配置
+                    herb_config = adventure_events.get("herb", {})
+                    herbs = herb_config.get("items", ["灵草", "灵芝", "仙参", "龙血草", "九转还魂草"])
+                    herb_messages = herb_config.get("messages", ["你在秘境中发现了珍贵的 {herb}！"])
+                    
                     # 发现灵草
-                    herbs = ["灵草", "灵芝", "仙参", "龙血草", "九转还魂草"]
                     herb_count = min(5, multiplier + random.randint(0, 2))
                     found_herbs = random.sample(herbs, min(herb_count, len(herbs)))
                     
@@ -1233,19 +1343,44 @@ class XiuXianData:
                     result["message"] = f"长时间的秘境探索中发现了珍贵的草药：{', '.join(found_herbs)}！"
                 
                 elif event_type == "monster":
+                    # 获取怪物配置
+                    monster_config = adventure_events.get("monster", {})
+                    monster_names = monster_config.get("names", ["山猪", "赤焰狐", "黑风狼", "幽冥蛇", "雷霆鹰"])
+                    
+                    # 获取战斗配置
+                    combat_config = self.config.combat_formulas.get("adventure", {})
+                    monster_level_config = combat_config.get("monster_level", {})
+                    min_level_diff = monster_level_config.get("min_level_diff", -5)
+                    max_level_diff = monster_level_config.get("max_level_diff", 5)
+                    
+                    win_chance_config = combat_config.get("win_chance", {})
+                    base_chance = win_chance_config.get("base_chance", 0.5)
+                    level_diff_multiplier = win_chance_config.get("level_diff_multiplier", 0.1)
+                    min_chance = win_chance_config.get("min_chance", 0.1)
+                    max_chance = win_chance_config.get("max_chance", 0.9)
+                    
+                    # 获取奖励配置
+                    exp_gain_config = adventure_config.get("exp_gain", {})
+                    exp_base = exp_gain_config.get("base", 5)
+                    exp_random_range = exp_gain_config.get("random_range", [5, 10])
+                    
+                    spirit_stones_gain_config = adventure_config.get("spirit_stones_gain", {})
+                    stones_base = spirit_stones_gain_config.get("base", 5)
+                    stones_level_multiplier = spirit_stones_gain_config.get("level_multiplier", 2)
+                    stones_random_range = spirit_stones_gain_config.get("random_range", [5, 15])
+                    
                     # 遇到妖兽
-                    monster_names = ["山猪", "赤焰狐", "黑风狼", "幽冥蛇", "雷霆鹰"]
                     monster = random.choice(monster_names)
                     
                     # 简单战斗逻辑
-                    monster_level = random.randint(max(1, user["level"] - 5), user["level"] + 5)
-                    win_chance = 0.5 + (user["level"] - monster_level) * 0.1  # 等级差影响胜率
-                    win_chance = max(0.1, min(0.9, win_chance))  # 胜率限制在10%~90%
+                    monster_level = random.randint(max(1, user["level"] + min_level_diff), user["level"] + max_level_diff)
+                    win_chance = base_chance + (user["level"] - monster_level) * level_diff_multiplier
+                    win_chance = max(min_chance, min(max_chance, win_chance))  # 胜率限制
                     
                     if random.random() < win_chance:
                         # 战斗胜利
-                        exp_gain = monster_level * random.randint(5, 10) * multiplier
-                        spirit_stones = monster_level * random.randint(5, 15) * multiplier
+                        exp_gain = monster_level * random.randint(exp_random_range[0], exp_random_range[1]) * multiplier
+                        spirit_stones = monster_level * random.randint(stones_random_range[0], stones_random_range[1]) * multiplier
                         
                         self.add_exp(user_id, exp_gain)
                         user = self.get_user(user_id)  # 重新获取用户数据，因为可能升级
@@ -1259,23 +1394,32 @@ class XiuXianData:
                         result["message"] = f"长时间的秘境探索中遇到了 {monster}，不敌其强大的实力，被迫撤退..."
                 
                 elif event_type == "opportunity":
-                    # 机缘
-                    opportunities = [
+                    # 获取机缘配置
+                    opportunity_config = adventure_events.get("opportunity", {})
+                    opportunities = opportunity_config.get("events", [
                         "发现了一处修炼宝地",
                         "偶遇前辈指点",
                         "得到一篇功法残卷",
                         "悟道树下顿悟",
                         "天降灵雨洗礼"
-                    ]
+                    ])
+                    
+                    # 获取技能获取概率
+                    technique_chance = adventure_config.get("technique_chance", 0.2)
+                    
+                    # 机缘
                     opportunity = random.choice(opportunities)
                     
+                    # 获取修为值
                     exp_gain = user["level"] * random.randint(10, 20) * multiplier
                     self.add_exp(user_id, exp_gain)
                     
                     # 有小概率获得功法
-                    if random.random() < 0.2 * multiplier:
-                        techniques = ["吐纳术", "御风术", "小周天功", "金刚不坏", "五行遁法", "太极剑法"]
-                        available_techniques = [t for t in techniques if t not in user["techniques"]]
+                    if random.random() < technique_chance * multiplier:
+                        # 从商店配置中获取可用功法
+                        available_techniques = list(self.config.shop_items.get("techniques", {}).keys())
+                        # 过滤掉已学习的功法
+                        available_techniques = [t for t in available_techniques if t not in user["techniques"]]
                         
                         if available_techniques:
                             new_technique = random.choice(available_techniques)
@@ -1288,21 +1432,32 @@ class XiuXianData:
                         result["message"] = f"长时间的秘境探索中{opportunity}，顿时感悟颇深！\n获得了 {exp_gain} 点修为！"
         
         elif status_type == "收集灵石中":
-            # 收集灵石
-            base_stones = 10 * multiplier
-            level_bonus = user["level"] * 2 * multiplier
+            # 从配置中获取挖矿相关参数
+            mining_config = self.config.game_values.get("mining", {})
+            base_stones = mining_config.get("base_stones", 10) * multiplier
+            level_multiplier = mining_config.get("level_multiplier", 2)
+            level_bonus = user["level"] * level_multiplier * multiplier
+            random_range = mining_config.get("random_range", [-5, 10])
+            min_stones = mining_config.get("min_stones", 5) * multiplier
+            critical_chance = mining_config.get("critical_chance", 0.1) * multiplier
+            critical_multiplier = mining_config.get("critical_multiplier", 3)
+            
+            # 获取挖矿事件配置
+            mining_events = self.config.mining_events
+            success_messages = mining_events.get("success", {}).get("messages", ["你辛勤地挖掘矿石，获得了 {stones} 灵石。"])
+            critical_messages = mining_events.get("success", {}).get("critical_messages", ["运气爆棚！你在矿洞中发现了一条灵石矿脉，获得了 {stones} 灵石！"])
             
             # 随机波动
-            stones = base_stones + level_bonus + random.randint(-5, 10) * multiplier
-            stones = max(5 * multiplier, stones)  # 至少获得基础灵石
+            stones = base_stones + level_bonus + random.randint(random_range[0], random_range[1]) * multiplier
+            stones = max(min_stones, stones)  # 至少获得基础灵石
             
             # 小概率暴击
-            critical = random.random() < 0.1 * multiplier
+            critical = random.random() < critical_chance
             if critical:
-                stones = stones * 3
-                result["message"] = f"长时间的灵石收集中运气爆棚！你发现了一条灵石矿脉，获得了 {stones} 灵石！"
+                stones = stones * critical_multiplier
+                result["message"] = random.choice(critical_messages).format(stones=stones)
             else:
-                result["message"] = f"长时间的灵石收集结束，你获得了 {stones} 灵石。"
+                result["message"] = random.choice(success_messages).format(stones=stones)
             
             user["spirit_stones"] += stones
             result["spirit_stones_gain"] = stones
