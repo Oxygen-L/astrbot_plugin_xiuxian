@@ -23,17 +23,50 @@ class XiuXianPlugin(Star):
         self.user_status_tasks = {}
         logger.info("修仙插件已启动")
     
+        # 遍历所有玩家，如果有状态未结束（除了修炼中状态），则创建任务
+        self._init_user_status_tasks()
+        
+    def _init_user_status_tasks(self):
+        '''初始化所有用户的状态任务'''
+        try:
+            # 获取所有用户数据
+            all_users = self.data_manager.get_all_users()
+            current_time = int(time.time())
+            task_count = 0
+            
+            for user_id, user_data in all_users.items():
+                # 检查用户是否有状态且状态未结束
+                if user_data.get("status") is not None and user_data.get("status") != "修炼中":
+                    # 获取用户名，如果没有则使用用户ID
+                    user_name = user_data.get("username", f"用户{user_id}")
+                    end_time = user_data.get("status_end_time", 0)
+                    group_id = user_data.get("group_id")
+                    for event in self.context.unified_msg_list:
+                        if str(event.message_obj.group_id) == group_id:
+                            unified_msg = event.unified_msg_origin
+                            # 创建状态任务
+                            self.create_user_status_task(user_id, user_name, end_time, unified_msg)
+                            task_count += 1
+            
+            if task_count > 0:
+                logger.info(f"初始化完成，已为 {task_count} 个用户创建状态任务")
+            else:
+                logger.info("初始化完成，没有需要创建的状态任务")
+        except Exception as e:
+            logger.error(f"初始化用户状态任务时出错: {e}")
+        
     @filter.command("修仙帮助")
     async def xiuxian_help(self, event: AstrMessageEvent):
         '''修仙游戏帮助指令'''
         help_text = """【修仙游戏指令】
                     /我要修仙 - 开始修仙之旅
                     /修仙帮助 - 显示帮助
-                    /修炼 [时间] - 闭关修炼获取修为，可指定时间（如：2小时30分钟，最长6小时）
+                    /开始修炼 - 开始闭关修炼，时间自定
+                    /结束修炼 - 结束闭关修炼并获取修为奖励
                     /修仙信息 - 查看修仙信息
                     /修仙排行 - 查看排行榜
                     /秘境探索 [时间] - 探索秘境获奖励，可指定时间（如：3小时45分钟，最长6小时）
-                    /灵石收集 [时间] - 获取灵石，可指定时间（如：1小时15分钟，最长6小时）
+                    /灵脉寻宝 [时间] - 获取灵石，可指定时间（最短1小时，最长6小时）
                     /修仙状态 - 查看当前状态
                     /修仙签到 - 每日签到
                     /突破 - 尝试突破到更高境界
@@ -61,9 +94,13 @@ class XiuXianPlugin(Star):
             yield event.plain_result(f"道友 {user_name}，你已经踏上修仙之路，不必重新开始。")
             return
         
-        # 标记用户已开始修仙并保存用户名称
+        # 获取群ID
+        group_id = str(event.message_obj.group_id)
+        
+        # 标记用户已开始修仙并保存用户名称和群ID
         user_data["has_started"] = True
         user_data["username"] = user_name
+        user_data["group_id"] = str(group_id) if group_id else None
         self.data_manager.update_user(user_id, user_data)
         
         # 使用Markdown格式化欢迎信息
@@ -122,9 +159,9 @@ class XiuXianPlugin(Star):
         
         yield event.plain_result(formatted_info)
     
-    @filter.command("修炼")
-    async def xiuxian_practice(self, event: AstrMessageEvent, duration: str = "1"):
-        '''修炼获取修为'''
+    @filter.command("开始修炼")
+    async def xiuxian_start_practice(self, event: AstrMessageEvent):
+        '''开始修炼，无需指定时间，由用户自行决定结束时间'''
         user_id = str(event.get_sender_id())
         user_name = event.get_sender_name()
         user_data = self.data_manager.get_user(user_id)
@@ -140,30 +177,52 @@ class XiuXianPlugin(Star):
             yield event.plain_result(f"道友 {user_name}，{status_info['message']}，无法进行其他操作。")
             return
         
-        # 使用工具类解析修炼时间参数
-        duration_hours = XiuXianUtils.parse_duration(duration)
-        
-        # 设置修炼状态
-        status_result = self.data_manager.set_status(user_id, "修炼中", duration_hours)
-        duration_hours = status_result["duration"]  # 更新 duration_hours 为实际的小时数，而不是传入的
+        # 设置修炼状态，使用0表示无限时长
+        status_result = self.data_manager.set_status(user_id, "修炼中", 0)
         
         if not status_result["success"]:
             yield event.plain_result(f"道友 {user_name}，{status_result['message']}")
             return
         
-        # 存储消息ID
-        unified_msg_origin = event.unified_msg_origin
-        
-        # 创建针对该用户的定时任务
-        self.create_user_status_task(user_id, user_name, status_result["end_time"], unified_msg_origin)
-        
-        # 计算结束时间的可读形式
-        end_time = time.strftime("%H:%M:%S", time.localtime(status_result["end_time"]))
-        
         # 使用Markdown格式化修炼开始信息
-        result = MarkdownFormatter.format_practice_start(user_name, duration_hours, end_time)
+        result = MarkdownFormatter.format_practice_start(user_name, 0, "")
         
         yield event.plain_result(result)
+    
+    @filter.command("结束修炼")
+    async def xiuxian_end_practice(self, event: AstrMessageEvent):
+        '''结束修炼并获取修为奖励'''
+        user_id = str(event.get_sender_id())
+        user_name = event.get_sender_name()
+        user_data = self.data_manager.get_user(user_id)
+        
+        # 检查用户是否已经开始修仙
+        if not user_data.get("has_started", False):
+            yield event.plain_result(f"道友 {user_name}，你尚未踏上修仙之路，请先输入 /我要修仙 开始你的修仙之旅。")
+            return
+        
+        # 检查用户当前状态
+        status_info = self.data_manager.check_status(user_id)
+        if not status_info["has_status"]:
+            yield event.plain_result(f"道友 {user_name}，你当前没有在修炼中，请先使用 /开始修炼 命令开始修炼。")
+            return
+        
+        # 检查是否是修炼状态
+        if status_info["status"] != "修炼中":
+            yield event.plain_result(f"道友 {user_name}，你当前处于{status_info['status']}，而不是修炼状态。")
+            return
+        
+        # 完成修炼状态并获取奖励
+        result = self.data_manager.complete_status(user_id)
+        
+        if not result["success"]:
+            yield event.plain_result(f"道友 {user_name}，{result['message']}")
+            return
+        
+        # 格式化修炼结果
+        formatted_result = MarkdownFormatter.format_practice_result(user_name, result)
+        
+        yield event.plain_result(formatted_result)
     
     @filter.command("修仙排行")
     async def xiuxian_rank(self, event: AstrMessageEvent):
@@ -224,7 +283,7 @@ class XiuXianPlugin(Star):
         
         yield event.plain_result(result)
     
-    @filter.command("灵石收集")
+    @filter.command("灵脉寻宝")
     async def xiuxian_mine(self, event: AstrMessageEvent, duration: str = "1"):
         '''挖矿获取灵石'''
         user_id = str(event.get_sender_id())
@@ -246,7 +305,7 @@ class XiuXianPlugin(Star):
         duration_hours = XiuXianUtils.parse_duration(duration)
         
         # 设置收集灵石状态
-        status_result = self.data_manager.set_status(user_id, "收集灵石中", duration_hours)
+        status_result = self.data_manager.set_status(user_id, "灵脉寻宝中", duration_hours)
         duration_hours = status_result["duration"]  # 更新 duration_hours 为实际的小时数，而不是传入的
         
         if not status_result["success"]:
@@ -562,7 +621,7 @@ class XiuXianPlugin(Star):
         all_users = self.data_manager.get_all_users()
         
         if target_id not in all_users:
-            yield event.plain_result(f"道友 {user_name}，找不到这位修仙者。")
+            yield event.plain_result(f"道友 {user_name}，找不到指定的修仙者。")
             return
         
         # 不能与自己切磋
@@ -615,7 +674,7 @@ class XiuXianPlugin(Star):
         all_users = self.data_manager.get_all_users()
 
         if target_id not in all_users:
-            yield event.plain_result(f"道友 {user_name}，找不到这位修仙者。")
+            yield event.plain_result(f"道友 {user_name}，找不到指定的修仙者。")
             return
         
         # 不能偷自己的灵石

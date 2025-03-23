@@ -1099,13 +1099,14 @@ class XiuXianData:
         return result
     
     # ===== 状态系统相关 =====
-    def set_status(self, user_id: str, status_type: str, duration_hours: float) -> Dict[str, Any]:
+    def set_status(self, user_id: str, status_type: str, duration_hours: float = 0) -> Dict[str, Any]:
         """设置用户状态
         
         Args:
             user_id: 用户ID
             status_type: 状态类型，可选值：'修炼中'、'探索中'、'收集灵石中'
-            duration_hours: 持续时间（小时），可以是小数表示小时和分钟
+            duration_hours: 持续时间（小时），可以是小数表示小时和分钟。
+                           对于修炼状态，如果为0则表示无限时长，由用户自行决定结束时间
             
         Returns:
             包含状态信息的字典
@@ -1135,12 +1136,20 @@ class XiuXianData:
         
         max_duration = self.config.get_max_duration_hours(activity_type)
         
-        # 限制持续时间在配置的范围内
-        duration_hours = max(min_duration, min(max_duration, duration_hours))
-        duration_seconds = int(duration_hours * 3600)
+        # 对于修炼状态，如果duration_hours为0，则设置为最大时长，表示无限时长
+        if status_type == "修炼中" and duration_hours == 0:
+            duration_hours = max_duration
+            duration_seconds = int(duration_hours * 3600)
+            end_time_message = "无限时长，请使用 /结束修炼 命令手动结束"
+        else:
+            # 限制持续时间在配置的范围内
+            duration_hours = max(min_duration, min(max_duration, duration_hours))
+            duration_seconds = int(duration_hours * 3600)
+            end_time_message = f"将持续 {duration_hours} 小时"
         
         # 计算奖励倍数（时间越长，奖励越多）
-        reward_multiplier = duration_hours + 1
+        # 对于修炼状态，初始设置为0，在结束时根据实际时长计算
+        reward_multiplier = 0 if status_type == "修炼中" else duration_hours
         
         # 设置状态
         user["status"] = status_type
@@ -1158,7 +1167,7 @@ class XiuXianData:
             "status": status_type,
             "duration": duration_hours,
             "end_time": user["status_end_time"],
-            "message": f"你已进入{status_type}状态，将持续 {duration_hours} 小时"
+            "message": f"你已进入{status_type}状态，{end_time_message}"
         }
     
     def check_status(self, user_id: str) -> Dict[str, Any]:
@@ -1193,7 +1202,7 @@ class XiuXianData:
             "has_status": True,
             "status": user["status"],
             "remaining": remaining,
-            "message": f"你当前正处于{user['status']}状态，还需 {time_str} 结束"
+            "message": f"你当前正处于{user['status']}状态，还需 {time_str} 结束" if user["status"]!="修炼中" else f"你当前正处于{user['status']}状态"
         }
     
     def complete_status(self, user_id: str) -> Dict[str, Any]:
@@ -1208,8 +1217,30 @@ class XiuXianData:
                 "message": "你当前没有进行中的状态"
             }
         
-        # 如果状态未结束
-        if current_time < user["status_end_time"]:
+        # 如果是修炼状态，允许随时结束并获得奖励
+        if user["status"] == "修炼中":
+            # 计算实际修炼时长（小时）
+            actual_duration = (current_time - user["status_start_time"]) / 3600
+            # 确保至少有一定的修炼时间（至少5分钟）
+            if actual_duration < 5/60:
+                # 更新修炼状态
+                user["status"] = None
+                user["status_start_time"] = None
+                user["status_end_time"] = None
+                user["status_duration"] = None
+                user["status_reward_multiplier"] = None
+                self.update_user(user_id, user)
+                return {
+                    "success": False,
+                    "message": "修炼时间太短，无法获得有效修为，请至少修炼5分钟"
+                }
+            # 更新奖励倍数
+            user["status_reward_multiplier"] = actual_duration
+            # 更新实际修炼时长
+            user["status_duration"] = actual_duration
+            self.update_user(user_id, user)
+        # 对于其他状态，如果未结束则不能完成
+        elif current_time < user["status_end_time"]:
             logger.info(f"current_time: {current_time}, user['status_end_time']: {user['status_end_time']}")
             remaining = user["status_end_time"] - current_time
             # 使用工具类格式化剩余时间
@@ -1232,6 +1263,8 @@ class XiuXianData:
             # 从配置中获取修炼相关参数
             practice_config = self.config.game_values.get("practice", {})
             base_exp_per_hour = practice_config.get("base_exp_per_hour", 10)
+            # 根据修炼时长计算实际经验
+            actual_exp = int(base_exp_per_hour * user["status_duration"])
             level_multiplier = practice_config.get("level_multiplier", 2)
             random_bonus_range = practice_config.get("random_bonus_range", [-5, 10])
             critical_chance = practice_config.get("critical_chance", 0.1)
@@ -1239,7 +1272,7 @@ class XiuXianData:
             
             # 使用工具类计算奖励
             reward_result = XiuXianUtils.calculate_reward(
-                base_value=base_exp_per_hour,
+                base_value=actual_exp,
                 level=user["level"],
                 multiplier=multiplier,
                 level_factor=level_multiplier,
@@ -1321,7 +1354,7 @@ class XiuXianData:
                     treasure_messages = treasure_config.get("messages", ["你在秘境中发现了一处宝藏，获得了 {spirit_stones} 灵石！"])
                     
                     # 发现宝物
-                    spirit_stones = random.randint(user["level"] * min_multiplier, user["level"] * max_multiplier) * multiplier
+                    spirit_stones = int(random.randint(user["level"] * min_multiplier, user["level"] * max_multiplier) * multiplier)
                     user["spirit_stones"] += spirit_stones
                     result["spirit_stones_gain"] = spirit_stones
                     result["message"] = random.choice(treasure_messages).format(spirit_stones=spirit_stones)
@@ -1379,8 +1412,8 @@ class XiuXianData:
                     
                     if random.random() < win_chance:
                         # 战斗胜利
-                        exp_gain = monster_level * random.randint(exp_random_range[0], exp_random_range[1]) * multiplier
-                        spirit_stones = monster_level * random.randint(stones_random_range[0], stones_random_range[1]) * multiplier
+                        exp_gain = int(monster_level * random.randint(exp_random_range[0], exp_random_range[1]) * multiplier)
+                        spirit_stones = int(monster_level * random.randint(stones_random_range[0], stones_random_range[1]) * multiplier)
                         
                         self.add_exp(user_id, exp_gain)
                         user = self.get_user(user_id)  # 重新获取用户数据，因为可能升级
@@ -1411,11 +1444,12 @@ class XiuXianData:
                     opportunity = random.choice(opportunities)
                     
                     # 获取修为值
-                    exp_gain = user["level"] * random.randint(10, 20) * multiplier
+                    exp_gain = int(user["level"] * random.randint(10, 20) * multiplier)
                     self.add_exp(user_id, exp_gain)
                     
                     # 有小概率获得功法
-                    if random.random() < technique_chance * multiplier:
+                    # 确保概率值在0-1之间
+                    if random.random() < min(1.0, technique_chance * multiplier):
                         # 从商店配置中获取可用功法
                         available_techniques = list(self.config.shop_items.get("techniques", {}).keys())
                         # 过滤掉已学习的功法
@@ -1434,11 +1468,11 @@ class XiuXianData:
         elif status_type == "收集灵石中":
             # 从配置中获取挖矿相关参数
             mining_config = self.config.game_values.get("mining", {})
-            base_stones = mining_config.get("base_stones", 10) * multiplier
+            base_stones = int(mining_config.get("base_stones", 10) * multiplier)
             level_multiplier = mining_config.get("level_multiplier", 2)
-            level_bonus = user["level"] * level_multiplier * multiplier
+            level_bonus = int(user["level"] * level_multiplier * multiplier)
             random_range = mining_config.get("random_range", [-5, 10])
-            min_stones = mining_config.get("min_stones", 5) * multiplier
+            min_stones = int(mining_config.get("min_stones", 5) * multiplier)
             critical_chance = mining_config.get("critical_chance", 0.1) * multiplier
             critical_multiplier = mining_config.get("critical_multiplier", 3)
             
@@ -1448,13 +1482,13 @@ class XiuXianData:
             critical_messages = mining_events.get("success", {}).get("critical_messages", ["运气爆棚！你在矿洞中发现了一条灵石矿脉，获得了 {stones} 灵石！"])
             
             # 随机波动
-            stones = base_stones + level_bonus + random.randint(random_range[0], random_range[1]) * multiplier
+            stones = base_stones + level_bonus + int(random.randint(random_range[0], random_range[1]) * multiplier)
             stones = max(min_stones, stones)  # 至少获得基础灵石
             
             # 小概率暴击
             critical = random.random() < critical_chance
             if critical:
-                stones = stones * critical_multiplier
+                stones = int(stones * critical_multiplier)
                 result["message"] = random.choice(critical_messages).format(stones=stones)
             else:
                 result["message"] = random.choice(success_messages).format(stones=stones)

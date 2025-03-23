@@ -2,7 +2,7 @@
     "_comment": "游戏基础数值配置文件，定义了游戏中各种活动的基础参数和计算公式",
     "practice": {
         "_comment": "修炼相关参数配置，定义了修炼获得修为的计算方式",
-        "base_exp_per_hour": 150,
+        "base_exp_per_hour": 500,
         "_comment_base_exp_per_hour": "每小时基础修为获取量",
         "level_multiplier": 2.5,
         "_comment_level_multiplier": "等级加成倍率，额外修为 = 玩家等级 × 此值",
@@ -25,14 +25,14 @@
         "_comment_punishment_chance": "触发惩罚事件的概率，范围0-1，当前为8%",
         "exp_gain": {
             "_comment": "修为获取相关参数",
-            "base": 10,
+            "base": 100,
             "_comment_base": "基础修为奖励",
             "random_range": [5, 15],
             "_comment_random_range": "随机波动范围，最终修为会在此范围内随机增减"
         },
         "spirit_stones_gain": {
             "_comment": "灵石获取相关参数",
-            "base": 10,
+            "base": 100,
             "_comment_base": "基础灵石奖励",
             "level_multiplier": 2.5,
             "_comment_level_multiplier": "等级加成倍率，额外灵石 = 玩家等级 × 此值",
@@ -52,7 +52,7 @@
         "_comment_cooldown_hours": "冷却时间范围(小时)，系统会在此范围内随机选择一个值",
         "punishment_chance": 0.08,
         "_comment_punishment_chance": "触发惩罚事件的概率，范围0-1，当前为8%",
-        "base_stones": 15,
+        "base_stones": 150,
         "_comment_base_stones": "基础灵石奖励数量",
         "level_multiplier": 2.5,
         "_comment_level_multiplier": "等级加成倍率，额外灵石 = 玩家等级 × 此值",
@@ -64,7 +64,7 @@
         "_comment_critical_multiplier": "暴击倍率，触发暴击时灵石乘以此值",
         "min_stones": 10,
         "_comment_min_stones": "最低保底灵石数量，无论如何都至少获得这么多",
-        "min_duration_hours": 0.01,
+        "min_duration_hours": 1,
         "_comment_min_duration_hours": "最短挖矿时间(小时)，不能低于此值",
         "max_duration_hours": 6,
         "_comment_max_duration_hours": "最长挖矿时间(小时)，不能超过此值"

@@ -106,8 +106,8 @@ class XiuXianUtils:
         Returns:
             包含奖励信息的字典
         """
-        # 计算基础值
-        base = base_value * multiplier
+        # 计算基础值（确保是整数）
+        base = int(base_value * multiplier)
         # 添加等级加成
         level_bonus = level * level_factor
         # 添加随机波动

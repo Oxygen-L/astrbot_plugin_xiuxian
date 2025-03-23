@@ -167,10 +167,8 @@ class MarkdownFormatter:
         格式化开始修炼信息
         """
         result = f"## ⏳ 闭关修炼\n\n**{user_name}** 道友开始闭关修炼！\n\n"
-        result += f"- 修炼时长: **{duration_hours}** 小时\n"
-        # result += f"- 预计出关: **{end_time}**\n\n"
-        result += "> *修炼时间越长，获得的修为越多，请耐心等待。*\n\n"
-        result += "> *修炼结束后，你将获得丰厚的修为奖励！*"
+        result += "> *修炼已开始，你可以随时使用 /结束修炼 命令结束修炼并获取奖励。*\n\n"
+        result += "> *修炼时间越长，获得的修为越多，请根据自己的情况决定修炼时长。*"
         
         return result
     
@@ -180,7 +178,7 @@ class MarkdownFormatter:
         格式化开始探索信息
         """
         result = f"## 🔍 秘境探索\n\n**{user_name}** 道友开始进入秘境探索！\n\n"
-        result += f"- 探索时长: **{duration_hours}** 小时\n"
+        result += f"- 探索时长: **{round(duration_hours, 3)}** 小时\n"
         # result += f"- 预计归来: **{end_time}**\n\n"
         result += "> *探索时间越长，获得的奖励越丰厚，但风险也越大，请耐心等待。*\n\n"
         result += "> *探索结束后，你将获得丰厚的奖励！*"
@@ -193,9 +191,36 @@ class MarkdownFormatter:
         格式化开始收集灵石信息
         """
         result = f"## 💎 灵石收集\n\n**{user_name}** 道友开始收集灵石！\n\n"
-        result += f"- 收集时长: **{duration_hours}** 小时\n"
+        result += f"- 收集时长: **{round(duration_hours, 3)}** 小时\n"
         # result += f"- 预计完成: **{end_time}**\n\n"
         return result
+        
+    @staticmethod
+    def format_practice_result(user_name, result):
+        """
+        格式化修炼结果
+        """
+        message = f"## 🔥 修炼完成\n\n**{user_name}** 道友结束了闭关修炼！\n\n"
+        
+        # 添加修炼时长信息
+        if "status_duration" in result:
+            hours = int(result["status_duration"])
+            minutes = int((result["status_duration"] - hours) * 60)
+            message += f"- 修炼时长: **{hours}小时{minutes}分钟**\n"
+        
+        # 添加获得的修为信息
+        if "exp_gain" in result:
+            message += f"- 获得修为: **{result['exp_gain']}**\n"
+        
+        # 添加是否顿悟的信息
+        if result.get("is_critical", False):
+            message += f"\n> *恭喜！你在修炼过程中有所顿悟，获得了额外的修为！*\n"
+        
+        # 添加是否升级的信息
+        if result.get("leveled_up", False):
+            message += f"\n> *恭喜！你的境界提升了！*\n"
+        
+        return message
         
     @staticmethod
     def format_breakthrough_result(user_name, result):
