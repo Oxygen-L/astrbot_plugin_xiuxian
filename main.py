@@ -41,12 +41,10 @@ class XiuXianPlugin(Star):
                     user_name = user_data.get("username", f"用户{user_id}")
                     end_time = user_data.get("status_end_time", 0)
                     group_id = user_data.get("group_id")
-                    for event in self.context.unified_msg_list:
-                        if str(event.message_obj.group_id) == group_id:
-                            unified_msg = event.unified_msg_origin
-                            # 创建状态任务
-                            self.create_user_status_task(user_id, user_name, end_time, unified_msg)
-                            task_count += 1
+                    unified_msg = user_data.get("unified_msg_origin")
+                    # 创建状态任务
+                    self.create_user_status_task(user_id, user_name, end_time, unified_msg)
+                    task_count += 1
             
             if task_count > 0:
                 logger.info(f"初始化完成，已为 {task_count} 个用户创建状态任务")
@@ -97,10 +95,11 @@ class XiuXianPlugin(Star):
         # 获取群ID
         group_id = str(event.message_obj.group_id)
         
-        # 标记用户已开始修仙并保存用户名称和群ID
+        # 标记用户已开始修仙并保存用户名称和群ID和唯一会话ID
         user_data["has_started"] = True
         user_data["username"] = user_name
         user_data["group_id"] = str(group_id) if group_id else None
+        user_data["unified_msg_origin"] = event.unified_msg_origin
         self.data_manager.update_user(user_id, user_data)
         
         # 使用Markdown格式化欢迎信息

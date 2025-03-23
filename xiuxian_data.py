@@ -1366,7 +1366,7 @@ class XiuXianData:
                     herb_messages = herb_config.get("messages", ["你在秘境中发现了珍贵的 {herb}！"])
                     
                     # 发现灵草
-                    herb_count = min(5, multiplier + random.randint(0, 2))
+                    herb_count = min(5, int(multiplier) + random.randint(0, 2))
                     found_herbs = random.sample(herbs, min(herb_count, len(herbs)))
                     
                     for herb in found_herbs:

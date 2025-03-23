@@ -41,7 +41,7 @@
         },
         "technique_chance": 0.25,
         "_comment_technique_chance": "获得功法的概率，范围0-1，当前为25%",
-        "min_duration_hours": 0.01,
+        "min_duration_hours": 1,
         "_comment_min_duration_hours": "最短探索时间(小时)，不能低于此值",
         "max_duration_hours": 6,
         "_comment_max_duration_hours": "最长探索时间(小时)，不能超过此值"
@@ -119,7 +119,7 @@
     },
     "status": {
         "_comment": "状态持续时间限制配置",
-        "min_duration_hours": 0.1,
+        "min_duration_hours": 1,
         "_comment_min_duration_hours": "最短状态持续时间(小时)，不能低于此值",
         "max_duration_hours": 6,
         "_comment_max_duration_hours": "最长状态持续时间(小时)，不能超过此值"
